@@ -1,0 +1,17 @@
+name: ci
+
+# Created by maelys-release v0.5.0 (0.6.0) and owned by this repository: add
+# jobs next to check; adopt keeps the socle line of check current.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@c32b614f4fc65c4f3dc9d99d6a45f2b97b2c773e # v0.5.0
+    with:
+      product: agent-cli-spec
