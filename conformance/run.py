@@ -134,6 +134,7 @@ def run_kit(program: Program) -> Report:
         if long in GLOBAL_OPTIONS:
             report.add(f"global option {long} has the contract's argument", item.get("argument") == GLOBAL_OPTIONS[long],
                        f"argument {item.get('argument')}")
+    global_longs = {item.get("long") for item in catalog.get("globalOptions", [])}
     for command in commands:
         identifier = command["id"]
         report.add(f"{identifier}: usage equals input.synopsis",
@@ -146,6 +147,16 @@ def run_kit(program: Program) -> Report:
         if "protocol" in command:
             report.add(f"{identifier}: a protocol belongs to a protocol-stream command",
                        command.get("outputMode") == "protocol-stream")
+        declared_options = {item.get("long") for item in command.get("input", {}).get("options", [])} | global_longs
+        declared_operands = {item.get("name") for item in command.get("input", {}).get("operands", [])}
+        unresolved = [entry for item in command.get("input", {}).get("options", [])
+                      for entry in list(item.get("requires", [])) if entry not in declared_options]
+        unresolved += [entry for item in command.get("input", {}).get("options", [])
+                       for entry in list(item.get("conflictsWith", []))
+                       if not (isinstance(entry, str) and
+                               (entry in declared_options if entry.startswith("--") else entry in declared_operands))]
+        report.add(f"{identifier}: requires and conflictsWith name declared options or operands", not unresolved,
+                   f"unresolved {unresolved}")
         one = program.run("describe", identifier, "--format", "json", "--non-interactive")
         body = envelope(report, f"{identifier}: describe {identifier}", one, expect_ok=True)
         if body is not None:
@@ -196,7 +207,9 @@ def run_kit(program: Program) -> Report:
                        not any("outputSchema" in item or "exitCodes" in item for item in data.get("commands", [])))
             report.add("describe filtered summary omits catalog-only members",
                        not any(key in data for key in ("globalOptions", "invariants", "output")))
-    check_failure(report, "describe --prefix without --summary fails with VALIDATION_FAILED",
+        check_failure(report, "describe --prefix of a known prefix without --summary fails with VALIDATION_FAILED",
+                      program.run("describe", "--prefix", prefix, "--format", "json"), "VALIDATION_FAILED")
+    check_failure(report, "describe --prefix of an unknown prefix without --summary still fails with VALIDATION_FAILED",
                   program.run("describe", "--prefix", "no-such-prefix", "--format", "json"), "VALIDATION_FAILED")
     check_failure(report, "describe rejects an invalid command prefix with VALIDATION_FAILED",
                   program.run("describe", "--summary", "--prefix", "no-such-prefix.", "--format", "json"),

@@ -11,6 +11,11 @@
   conformance kit with the filtered-summary contract. This is a compatible
   addition to `agent-cli/v2`; existing invocations and documents are
   unchanged.
+- `conflictsWith` of an option may name an operand of the same command, not
+  only an option: an entry starting with `--` names an option, any other
+  entry names an operand of `input.operands`. Every entry of `requires` and
+  `conflictsWith` resolves to a declaration of the same command or to a
+  global option; the kit verifies it for every command of the catalog.
 
 ## 2.0.1 — 2026-09-04
 

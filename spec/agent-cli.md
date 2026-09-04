@@ -57,7 +57,11 @@ not perform an arbitrary string-prefix match. The response has `kind:
 and otherwise follows the summary rules above. Catalog order is preserved,
 including hidden and unavailable descriptors. No match fails with
 `INVALID_COMMAND`. `--prefix` requires `--summary` and conflicts with the
-`COMMAND_ID` operand; either misuse fails with `VALIDATION_FAILED`.
+`COMMAND_ID` operand; either misuse fails with `VALIDATION_FAILED`. The
+prefix is resolved inside the command, after option validation: a misuse
+fails with `VALIDATION_FAILED` even when the prefix is unknown, and only a
+well-formed `describe --summary --prefix PREFIX` without a match fails with
+`INVALID_COMMAND`.
 
 An agent identifies a command by `id`, never by its human label, and builds
 an invocation from `input`, never from help text.
@@ -94,12 +98,15 @@ after the pattern reaches the command verbatim, including `--help`.
 ### Options
 
 `long` (`--name`), `required`, `repeatable`, `summary`, `requires` (options
-that MUST accompany this one), `conflictsWith` (options, or operand names,
-that cannot accompany this one); optionally `argument`
+that MUST accompany this one), `conflictsWith` (what cannot accompany this
+one: an entry starting with `--` names an option, any other entry names an
+operand of `input.operands`); optionally `argument`
 (`name`, `type`, and `choices`, `minimum`, `maximum`, `algorithms`, `pattern`
 as the kind needs), `default` (the single source of the default, as text),
 `group` (all-or-none with the options of the same group). An option without
-`argument` is a flag; `--flag=false` is accepted.
+`argument` is a flag; `--flag=false` is accepted. Every entry of `requires`
+and `conflictsWith` MUST resolve to an option of the same command or a
+global option, or for `conflictsWith` to an operand of the same command.
 
 ### Constraints
 
