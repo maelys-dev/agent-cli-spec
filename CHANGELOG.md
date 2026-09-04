@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 — 2026-09-04
 
 - Specify token-efficient namespace discovery with `describe --summary
   --prefix PREFIX`. A filtered summary preserves catalog order, identifies its
