@@ -166,6 +166,47 @@ def run_kit(program: Program) -> Report:
         report.add("describe --summary omits schemas and exit codes",
                    not any("outputSchema" in command or "exitCodes" in command for command in data.get("commands", [])))
         report.add("--compact renders one line", summary.stdout.count("\n") <= 1)
+    describe_options = {item.get("long"): item for item in by_id.get("describe", {}).get("input", {}).get("options", [])}
+    prefix_option = describe_options.get("--prefix", {})
+    report.add("describe declares --prefix",
+               prefix_option.get("argument", {}).get("type") == "string"
+               and prefix_option.get("argument", {}).get("pattern")
+               == r"^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*$"
+               and "--summary" in prefix_option.get("requires", [])
+               and "COMMAND_ID" in prefix_option.get("conflictsWith", []),
+               f"option {prefix_option!r}")
+    namespaces = [identifier.split(".", 1)[0] for identifier in by_id if "." in identifier]
+    prefixes = namespaces or list(by_id)[:1]
+    if prefixes:
+        prefix = prefixes[0]
+        expected = [identifier for identifier in by_id if identifier == prefix or identifier.startswith(prefix + ".")]
+        filtered = program.run("describe", "--summary", "--prefix", prefix, "--format", "json", "--compact",
+                               "--non-interactive")
+        body = envelope(report, "describe filtered summary envelope", filtered, expect_ok=True)
+        if body is not None:
+            data = body["data"]
+            issues = validate(data, SCHEMAS["describe"])
+            report.add("describe filtered summary matches schemas/describe.json", not issues, issues_text(issues))
+            report.add("describe filtered summary identifies its filter",
+                       data.get("kind") == "summary"
+                       and data.get("filter") == {"kind": "command-prefix", "value": prefix})
+            report.add("describe filtered summary selects the namespace in catalog order",
+                       [item.get("id") for item in data.get("commands", [])] == expected)
+            report.add("describe filtered summary omits schemas and exit codes",
+                       not any("outputSchema" in item or "exitCodes" in item for item in data.get("commands", [])))
+            report.add("describe filtered summary omits catalog-only members",
+                       not any(key in data for key in ("globalOptions", "invariants", "output")))
+    check_failure(report, "describe --prefix without --summary fails with VALIDATION_FAILED",
+                  program.run("describe", "--prefix", "no-such-prefix", "--format", "json"), "VALIDATION_FAILED")
+    check_failure(report, "describe rejects an invalid command prefix with VALIDATION_FAILED",
+                  program.run("describe", "--summary", "--prefix", "no-such-prefix.", "--format", "json"),
+                  "VALIDATION_FAILED")
+    check_failure(report, "describe --prefix conflicts with COMMAND_ID",
+                  program.run("describe", "help", "--summary", "--prefix", "help", "--format", "json"),
+                  "VALIDATION_FAILED")
+    check_failure(report, "describe of an unknown prefix fails with INVALID_COMMAND",
+                  program.run("describe", "--summary", "--prefix", "no-such-prefix", "--format", "json"),
+                  "INVALID_COMMAND")
     check_failure(report, "describe of an unknown identifier fails with INVALID_COMMAND",
                   program.run("describe", "no.such.command", "--format", "json"), "INVALID_COMMAND")
     # ---- version, help ----

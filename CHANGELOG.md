@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Specify token-efficient namespace discovery with `describe --summary
+  --prefix PREFIX`. A filtered summary preserves catalog order, identifies its
+  `command-prefix` filter, and rejects an unknown prefix with
+  `INVALID_COMMAND`. The option is incompatible with `COMMAND_ID` and requires
+  `--summary`.
+- Extend `schemas/describe.json`, the conformant fixture and the external
+  conformance kit with the filtered-summary contract. This is a compatible
+  addition to `agent-cli/v2`; existing invocations and documents are
+  unchanged.
+
 ## 2.0.1 — 2026-09-04
 
 - The specification and the schemas are licensed CC BY-SA 4.0
