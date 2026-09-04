@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 
 BREAK = os.environ.get("CONFORMANT_BREAK", "")
@@ -18,8 +19,9 @@ PROGRAM = "conformant"
 EXIT_CODES = {"0": "command completed", "1": "execution failed", "2": "valid report with violations"}
 
 
-def option(long, summary, argument=None, default=None):
-    item = {"long": long, "required": False, "repeatable": False, "summary": summary, "requires": [], "conflictsWith": []}
+def option(long, summary, argument=None, default=None, requires=(), conflicts=()):
+    item = {"long": long, "required": False, "repeatable": False, "summary": summary,
+            "requires": list(requires), "conflictsWith": list(conflicts)}
     if argument:
         item["argument"] = argument
     if default is not None:
@@ -36,10 +38,12 @@ GLOBAL_OPTIONS = [
 ]
 
 
-def command(identifier, pattern, usage, purpose, effect, operands=(), options=(), hidden=False, mode="json-envelope"):
+def command(identifier, pattern, usage, purpose, effect, operands=(), options=(), constraints=(), hidden=False,
+            mode="json-envelope"):
     return {"id": identifier, "pattern": pattern, "usage": usage, "purpose": purpose, "effect": effect,
             "outputMode": mode, "external": False, "hidden": hidden, "available": True,
-            "input": {"synopsis": usage, "operands": list(operands), "options": list(options), "constraints": [],
+            "input": {"synopsis": usage, "operands": list(operands), "options": list(options),
+                      "constraints": list(constraints),
                       "passthrough": False},
             "outputSchema": {"type": "object"}, "exitCodes": dict(EXIT_CODES)}
 
@@ -48,9 +52,14 @@ CATALOG = [
     command("help", ["help"], "help [COMMAND_ID] | --help", "Help.", "read",
             [{"name": "COMMAND_ID", "required": False, "variadic": False, "summary": "Identifier."}]),
     command("version", ["version"], "version | --version", "Identity.", "read"),
-    command("describe", ["describe"], "describe [COMMAND_ID] [--summary]", "Catalog.", "read",
+    command("describe", ["describe"], "describe [COMMAND_ID] [--summary] [--prefix PREFIX]", "Catalog.", "read",
             [{"name": "COMMAND_ID", "required": False, "variadic": False, "summary": "Identifier."}],
-            [option("--summary", "Without schemas.")]),
+            [option("--summary", "Without schemas."),
+             option("--prefix", "Select a command namespace.",
+                    {"name": "PREFIX", "type": "string",
+                     "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$"},
+                    requires=["--summary"], conflicts=["COMMAND_ID"])],
+            [{"kind": "requires", "options": ["--prefix", "--summary"]}]),
     command("completion", ["completion"], "completion SHELL", "Completion script.", "read",
             [{"name": "SHELL", "required": True, "variadic": False, "summary": "Shell.", "type": "choice",
               "choices": ["bash", "zsh", "fish"]}]),
@@ -92,7 +101,7 @@ def main(argv):
             break
         if word.startswith("--"):
             name, _, value = word.partition("=")
-            if name in ("--format", "--color") and not value:
+            if name in ("--format", "--color", "--prefix") and not value:
                 index += 1
                 value = argv[index] if index < len(argv) else ""
             options[name] = value or True
@@ -122,6 +131,16 @@ def main(argv):
     for name in options:
         if name not in known and name != "--version":
             return fail(selected["id"], "VALIDATION_FAILED", f"Option {name} is not supported by '{selected['id']}'.", fmt, compact)
+    if selected["id"] == "describe" and "--prefix" in options:
+        prefix = options["--prefix"]
+        if "--summary" not in options:
+            return fail("describe", "VALIDATION_FAILED", "--prefix requires --summary.", fmt, compact)
+        if operands:
+            return fail("describe", "VALIDATION_FAILED", "--prefix conflicts with COMMAND_ID.", fmt, compact)
+        if not isinstance(prefix, str) or not prefix:
+            return fail("describe", "VALIDATION_FAILED", "--prefix requires PREFIX.", fmt, compact)
+        if re.fullmatch(r"[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*", prefix) is None:
+            return fail("describe", "VALIDATION_FAILED", "--prefix is not a valid command prefix.", fmt, compact)
     if fmt == "jsonl" and selected["outputMode"] != "json-records":
         return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
     identifier = selected["id"]
@@ -140,9 +159,17 @@ def main(argv):
                 return fail("describe", "INVALID_COMMAND", f"Unknown command identifier {operands[0]!r}.", fmt, compact)
             data["kind"], data["commands"] = "command", [by_id[operands[0]]]
         elif "--summary" in options:
+            selected_commands = CATALOG
+            if "--prefix" in options:
+                prefix = options["--prefix"]
+                selected_commands = [item for item in CATALOG
+                                     if item["id"] == prefix or item["id"].startswith(prefix + ".")]
+                if not selected_commands:
+                    return fail("describe", "INVALID_COMMAND", f"Unknown command prefix {prefix!r}.", fmt, compact)
+                data["filter"] = {"kind": "command-prefix", "value": prefix}
             data["kind"] = "summary"
             data["commands"] = [{key: value for key, value in item.items() if key not in ("outputSchema", "exitCodes")}
-                                for item in CATALOG]
+                                for item in selected_commands]
         else:
             data.update({"kind": "catalog", "globalOptions": GLOBAL_OPTIONS, "invariants": ["one catalog"],
                          "output": {"contract": "agent-cli/v2", "schemaVersion": 2, "stdout": "success data only",

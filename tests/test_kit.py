@@ -59,6 +59,22 @@ class ValidatorTest(unittest.TestCase):
         self.assertTrue(validate({**failure, "exitCode": 0}, SCHEMAS["envelope"]))
         self.assertTrue(validate({**success, "extra": 1}, SCHEMAS["envelope"]))
 
+    def test_filtered_summary_schema(self) -> None:
+        example = json.loads((ROOT / "examples" / "maelys-cli.contract.json").read_text())
+        document = {**example["programs"]["maelys"], "version": "0.0.0", "framework": "example",
+                    "kind": "summary", "filter": {"kind": "command-prefix", "value": "image.store"}}
+        document.pop("globalOptions", None)
+        document.pop("invariants", None)
+        document.pop("output", None)
+        document["commands"] = [
+            {key: value for key, value in command.items() if key not in ("outputSchema", "exitCodes")}
+            for command in document["commands"]
+            if command["id"] == "image.store" or command["id"].startswith("image.store.")
+        ]
+        self.assertEqual(validate(document, SCHEMAS["describe"]), [])
+        self.assertTrue(validate({**document, "filter": {"kind": "command-prefix", "value": "image."}},
+                                 SCHEMAS["describe"]))
+
 
 class KitTest(unittest.TestCase):
     def test_conformant_fixture_passes(self) -> None:

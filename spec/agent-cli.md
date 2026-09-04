@@ -22,6 +22,8 @@ A program MUST answer these invocations with a success envelope:
 ```sh
 PROGRAM describe --format json                  # the catalog
 PROGRAM describe --summary --format json        # every descriptor, without schemas
+PROGRAM describe --summary --prefix PREFIX --format json
+                                                # one command namespace, without schemas
 PROGRAM describe COMMAND_ID --format json       # one descriptor
 ```
 
@@ -39,10 +41,22 @@ PROGRAM describe COMMAND_ID --format json       # one descriptor
 | `framework` | the implementation and its version, free text |
 | `commands` | the descriptors: all of them, or the one asked |
 | `globalOptions`, `invariants`, `output` | the catalog form only |
+| `filter` | the filtered-summary selection, present only with `--summary --prefix PREFIX` |
 
 `describe --summary` omits `outputSchema` and `exitCodes` from each
 descriptor. `describe COMMAND_ID` returns exactly the catalog's descriptor of
 that identifier, and fails with `INVALID_COMMAND` for an unknown one.
+
+`describe --summary --prefix PREFIX` is the token-efficient discovery form
+for a command namespace. `PREFIX` has the command-identifier grammar without
+a trailing dot. It selects the command whose identifier equals `PREFIX`, if
+one exists, and every command whose identifier starts with `PREFIX.`; it does
+not perform an arbitrary string-prefix match. The response has `kind:
+"summary"`, carries `filter: {"kind": "command-prefix", "value": PREFIX}`
+and otherwise follows the summary rules above. Catalog order is preserved,
+including hidden and unavailable descriptors. No match fails with
+`INVALID_COMMAND`. `--prefix` requires `--summary` and conflicts with the
+`COMMAND_ID` operand; either misuse fails with `VALIDATION_FAILED`.
 
 An agent identifies a command by `id`, never by its human label, and builds
 an invocation from `input`, never from help text.
@@ -79,7 +93,8 @@ after the pattern reaches the command verbatim, including `--help`.
 ### Options
 
 `long` (`--name`), `required`, `repeatable`, `summary`, `requires` (options
-that MUST accompany this one), `conflictsWith`; optionally `argument`
+that MUST accompany this one), `conflictsWith` (options, or operand names,
+that cannot accompany this one); optionally `argument`
 (`name`, `type`, and `choices`, `minimum`, `maximum`, `algorithms`, `pattern`
 as the kind needs), `default` (the single source of the default, as text),
 `group` (all-or-none with the options of the same group). An option without
@@ -145,7 +160,7 @@ a JSON failure envelope from a stream command whose stdout it cannot touch.
 | --- | --- | --- |
 | `help` | `help [COMMAND_ID]`, also `--help` | `{"text": ..., "commands": [ids]}` |
 | `version` | `version`, also `--version` | `product`, `program`, `version`, `contract`, `cliApi`, `framework` |
-| `describe` | `describe [COMMAND_ID] [--summary]` | section 1 |
+| `describe` | `describe [COMMAND_ID] [--summary] [--prefix PREFIX]` | section 1 |
 | `completion` | `completion bash\|zsh\|fish` | `{"shell": ..., "script": ...}`; text mode prints the script |
 | `complete.candidates` | `__complete -- WORDS...`, hidden, `json-records` | `{"count": N, "records": [{"word": ...}]}` |
 

@@ -27,6 +27,15 @@ conformance/run.py node dist/cli.js --json        # the report as JSON
 conformance/run.py PROGRAM --report report.json   # keep the report, print the lines
 ```
 
+Large catalogs can be inspected without transferring every descriptor:
+
+```sh
+PROGRAM describe --summary --prefix content --format json
+```
+
+This returns the compact descriptors whose identifier is `content` or starts
+with `content.`. Use `describe COMMAND_ID` afterwards for one full descriptor.
+
 The kit needs `python3` and nothing else. It only runs read commands and
 invocations the contract says must be refused; it never passes `--apply`.
 An implementation runs it in its own continuous integration on its own

@@ -15,6 +15,7 @@
     "cliApi": {"type": "integer", "minimum": 1},
     "framework": {"type": "string"},
     "commands": {"type": "array", "items": {"$ref": "#/definitions/descriptor"}},
+    "filter": {"$ref": "#/definitions/filter"},
     "globalOptions": {"type": "array", "items": {"$ref": "#/definitions/option"}},
     "invariants": {"type": "array", "items": {"type": "string"}},
     "output": {
@@ -33,6 +34,16 @@
   "patternProperties": {"^x-": {}},
   "additionalProperties": false,
   "definitions": {
+    "filter": {
+      "type": "object",
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {"const": "command-prefix"},
+        "value": {"type": "string", "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$"}
+      },
+      "patternProperties": {"^x-": {}},
+      "additionalProperties": false
+    },
     "effect": {"enum": ["read", "preview", "apply", "commit", "execute", "stream"]},
     "transaction": {
       "type": "object",
