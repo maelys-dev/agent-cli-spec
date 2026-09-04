@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Extending agent-cli/v2
 
 The contract is deliberately closed: closed effects, closed value kinds,

@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # agent-cli/v2
 
 The contract of a command-line program that humans and agents drive the same

@@ -58,4 +58,8 @@ This repository releases through the maelys-release socle: a signed tag
 `vX.Y.Z` publishes a tarball of the spec, the schemas and the kit, with a
 provenance attestation. See `RELEASING.md`.
 
-Code is MPL-2.0; the text of the specification and the schemas are CC0-1.0.
+The specification (`spec/`) and the schemas (`schemas/`) are licensed
+CC BY-SA 4.0 (`LICENSE-SPEC`): reuse and derive freely, credit
+maelys-dev/agent-cli-spec, and publish any derived specification under the
+same terms. The code (`conformance/`, `tests/`, `scripts/`) is MPL-2.0
+(`LICENSE`).

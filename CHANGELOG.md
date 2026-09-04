@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.1 — 2026-09-04
+
+- The specification and the schemas are licensed CC BY-SA 4.0
+  (`LICENSE-SPEC`) instead of CC0: attribution to this repository and
+  share-alike on derived specifications. The code stays MPL-2.0. Nothing
+  else changes; implementations pinned at v2.0.0 need not move.
+
 ## 2.0.0 — 2026-09-04
 
 First written form of `agent-cli/v2`, until now split between the
