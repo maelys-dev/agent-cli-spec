@@ -15,3 +15,4 @@ jobs:
     uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@c32b614f4fc65c4f3dc9d99d6a45f2b97b2c773e # v0.5.0
     with:
       product: agent-cli-spec
+      sanitizer_command: ''   # no compiled code here
