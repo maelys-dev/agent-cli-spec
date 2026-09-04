@@ -16,6 +16,12 @@
   entry names an operand of `input.operands`. Every entry of `requires` and
   `conflictsWith` resolves to a declaration of the same command or to a
   global option; the kit verifies it for every command of the catalog.
+- Section 11 states how a mandatory addition stays compatible: an
+  implementation is conformant to the tag it pins and takes the addition on
+  when it moves its pin; an agent relies on the catalog, not on
+  `agent-cli/v2`, to know which forms a program accepts. Section 1 applies
+  it to `--prefix`: an agent checks the `describe` descriptor before using
+  it and falls back to `describe --summary`.
 
 ## 2.0.1 — 2026-09-04
 

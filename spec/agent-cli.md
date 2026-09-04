@@ -61,7 +61,10 @@ including hidden and unavailable descriptors. No match fails with
 prefix is resolved inside the command, after option validation: a misuse
 fails with `VALIDATION_FAILED` even when the prefix is unknown, and only a
 well-formed `describe --summary --prefix PREFIX` without a match fails with
-`INVALID_COMMAND`.
+`INVALID_COMMAND`. An agent checks that the `describe` descriptor declares
+`--prefix` before using it, and falls back to `describe --summary` when it
+does not: a program pinned to an earlier tag of this contract does not have
+this form.
 
 An agent identifies a command by `id`, never by its human label, and builds
 an invocation from `input`, never from help text.
@@ -263,7 +266,12 @@ continuous integration against its own binaries.
 ## 11. Versions of this contract
 
 `agent-cli/v2` is the identifier of this document. A compatible clarification
-or addition (a new optional member, a new value kind) is a new tag of this
-repository and keeps the identifier. An incompatible change (a member
-removed, a meaning changed, a required member added) changes the identifier
-to `agent-cli/v3` and starts a new document.
+or addition (a new optional member, a new value kind, a new invocation that
+leaves existing invocations and documents unchanged) is a new tag of this
+repository and keeps the identifier. Such an addition may be mandatory in the
+text of the tag that introduces it: an implementation is conformant to the
+tag it pins, and takes the addition on when it moves its pin. An agent that
+reads `agent-cli/v2` therefore relies on the catalog, not on the identifier,
+to know which forms a program accepts. An incompatible change (a member
+removed, a meaning changed, a required member added to an existing document)
+changes the identifier to `agent-cli/v3` and starts a new document.
