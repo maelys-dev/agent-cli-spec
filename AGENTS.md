@@ -1,5 +1,5 @@
 <!-- maelys-release:begin -->
-# Maelys release socle (maelys-release untagged)
+# Maelys release socle (maelys-release v0.6.1)
 
 This repository publishes through the shared maelys-release workflows. The
 rules below hold for every release-related change; the complete conventions
