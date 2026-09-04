@@ -62,17 +62,20 @@ class ValidatorTest(unittest.TestCase):
     def test_filtered_summary_schema(self) -> None:
         example = json.loads((ROOT / "examples" / "maelys-cli.contract.json").read_text())
         document = {**example["programs"]["maelys"], "version": "0.0.0", "framework": "example",
-                    "kind": "summary", "filter": {"kind": "command-prefix", "value": "image.store"}}
+                    "kind": "summary", "filter": {"kind": "command-prefix", "value": "agents"}}
         document.pop("globalOptions", None)
         document.pop("invariants", None)
         document.pop("output", None)
         document["commands"] = [
             {key: value for key, value in command.items() if key not in ("outputSchema", "exitCodes")}
             for command in document["commands"]
-            if command["id"] == "image.store" or command["id"].startswith("image.store.")
+            if command["id"] == "agents" or command["id"].startswith("agents.")
         ]
+        self.assertTrue(document["commands"], "the example must contain the agents namespace")
         self.assertEqual(validate(document, SCHEMAS["describe"]), [])
-        self.assertTrue(validate({**document, "filter": {"kind": "command-prefix", "value": "image."}},
+        self.assertTrue(validate({**document, "filter": {"kind": "command-prefix", "value": "agents."}},
+                                 SCHEMAS["describe"]))
+        self.assertTrue(validate({**document, "filter": {"kind": "command-prefix", "value": "Agents"}},
                                  SCHEMAS["describe"]))
 
 
