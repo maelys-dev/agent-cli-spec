@@ -48,8 +48,9 @@ descriptor. `describe COMMAND_ID` returns exactly the catalog's descriptor of
 that identifier, and fails with `INVALID_COMMAND` for an unknown one.
 
 `describe --summary --prefix PREFIX` is the token-efficient discovery form
-for a command namespace. `PREFIX` has the command-identifier grammar without
-a trailing dot. It selects the command whose identifier equals `PREFIX`, if
+for a command namespace. `PREFIX` has the command-identifier grammar of
+section 2 without a trailing dot, that is `^[a-z](?:[a-z0-9.-]*[a-z0-9-])?$`.
+It selects the command whose identifier equals `PREFIX`, if
 one exists, and every command whose identifier starts with `PREFIX.`; it does
 not perform an arbitrary string-prefix match. The response has `kind:
 "summary"`, carries `filter: {"kind": "command-prefix", "value": PREFIX}`

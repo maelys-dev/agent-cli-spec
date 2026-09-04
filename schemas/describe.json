@@ -39,7 +39,7 @@
       "required": ["kind", "value"],
       "properties": {
         "kind": {"const": "command-prefix"},
-        "value": {"type": "string", "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$"}
+        "value": {"type": "string", "pattern": "^[a-z](?:[a-z0-9.-]*[a-z0-9-])?$"}
       },
       "patternProperties": {"^x-": {}},
       "additionalProperties": false
