@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/maelys-dev/agent-cli-spec/schemas/records.json",
+  "title": "agent-cli/v2 json-records data",
+  "description": "The data of a json-records command in its envelope; with --format jsonl each record is one line.",
+  "type": "object",
+  "required": ["count", "records"],
+  "properties": {
+    "count": {"type": "integer", "minimum": 0},
+    "records": {"type": "array", "items": {"type": "object"}}
+  },
+  "patternProperties": {"^x-": {}},
+  "additionalProperties": false
+}

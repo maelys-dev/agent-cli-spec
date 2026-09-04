@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/maelys-dev/agent-cli-spec/schemas/describe.json",
+  "title": "agent-cli/v2 describe document",
+  "description": "The data member of a describe envelope: the catalog, the summary, or one command.",
+  "type": "object",
+  "required": ["schemaVersion", "kind", "program", "product", "version", "contract", "cliApi", "framework", "commands"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "kind": {"enum": ["catalog", "summary", "command"]},
+    "program": {"type": "string", "minLength": 1},
+    "product": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "contract": {"const": "agent-cli/v2"},
+    "cliApi": {"type": "integer", "minimum": 1},
+    "framework": {"type": "string"},
+    "commands": {"type": "array", "items": {"$ref": "#/definitions/descriptor"}},
+    "globalOptions": {"type": "array", "items": {"$ref": "#/definitions/option"}},
+    "invariants": {"type": "array", "items": {"type": "string"}},
+    "output": {
+      "type": "object",
+      "required": ["contract", "schemaVersion", "stdout", "stderr"],
+      "properties": {
+        "contract": {"const": "agent-cli/v2"},
+        "schemaVersion": {"const": 2},
+        "stdout": {"type": "string"},
+        "stderr": {"type": "string"}
+      },
+      "patternProperties": {"^x-": {}},
+      "additionalProperties": false
+    }
+  },
+  "patternProperties": {"^x-": {}},
+  "additionalProperties": false,
+  "definitions": {
+    "effect": {"enum": ["read", "preview", "apply", "commit", "execute", "stream"]},
+    "transaction": {
+      "type": "object",
+      "required": ["plan", "apply"],
+      "properties": {"plan": {"const": "preview"}, "apply": {"enum": ["apply", "commit"]}},
+      "additionalProperties": false
+    },
+    "kind": {
+      "enum": ["boolean", "string", "integer", "unsigned", "size", "duration", "path", "absolute-path",
+               "choice", "hex", "digest", "sha256"]
+    },
+    "argument": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "type": {"$ref": "#/definitions/kind"},
+        "choices": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "minimum": {"type": "number"},
+        "maximum": {"type": "number"},
+        "algorithms": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "digits": {"type": ["integer", "array"], "items": {"type": "integer"}},
+        "pattern": {"type": "string"}
+      },
+      "patternProperties": {"^x-": {}},
+      "additionalProperties": false
+    },
+    "option": {
+      "type": "object",
+      "required": ["long", "required", "repeatable", "summary", "requires", "conflictsWith"],
+      "properties": {
+        "long": {"type": "string", "pattern": "^--[a-z][a-z0-9-]*$"},
+        "required": {"type": "boolean"},
+        "repeatable": {"type": "boolean"},
+        "summary": {"type": "string", "minLength": 1},
+        "requires": {"type": "array", "items": {"type": "string"}},
+        "conflictsWith": {"type": "array", "items": {"type": "string"}},
+        "argument": {"$ref": "#/definitions/argument"},
+        "default": {"type": "string"},
+        "group": {"type": "string"}
+      },
+      "patternProperties": {"^x-": {}},
+      "additionalProperties": false
+    },
+    "operand": {
+      "type": "object",
+      "required": ["name", "required", "variadic", "summary"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"},
+        "variadic": {"type": "boolean"},
+        "summary": {"type": "string", "minLength": 1},
+        "type": {"$ref": "#/definitions/kind"},
+        "choices": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "minimum": {"type": "number"},
+        "maximum": {"type": "number"}
+      },
+      "patternProperties": {"^x-": {}},
+      "additionalProperties": false
+    },
+    "constraint": {
+      "type": "object",
+      "required": ["kind", "options"],
+      "properties": {
+        "kind": {"enum": ["requires", "at-most-one", "exactly-one", "all-or-none"]},
+        "options": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+      },
+      "patternProperties": {"^x-": {}},
+      "additionalProperties": false
+    },
+    "input": {
+      "type": "object",
+      "required": ["synopsis", "operands", "options", "constraints", "passthrough"],
+      "properties": {
+        "synopsis": {"type": "string", "minLength": 1},
+        "operands": {"type": "array", "items": {"$ref": "#/definitions/operand"}},
+        "options": {"type": "array", "items": {"$ref": "#/definitions/option"}},
+        "constraints": {"type": "array", "items": {"$ref": "#/definitions/constraint"}},
+        "passthrough": {"type": "boolean"}
+      },
+      "patternProperties": {"^x-": {}},
+      "additionalProperties": false
+    },
+    "descriptor": {
+      "type": "object",
+      "required": ["id", "pattern", "usage", "purpose", "effect", "outputMode", "external", "hidden", "available", "input"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9.-]*$"},
+        "pattern": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
+        "usage": {"type": "string", "minLength": 1},
+        "purpose": {"type": "string", "minLength": 1},
+        "effect": {"anyOf": [{"$ref": "#/definitions/effect"}, {"$ref": "#/definitions/transaction"}]},
+        "outputMode": {"enum": ["json-envelope", "json-records", "protocol-stream"]},
+        "protocol": {"type": "string", "minLength": 1},
+        "external": {"type": "boolean"},
+        "hidden": {"type": "boolean"},
+        "available": {"type": "boolean"},
+        "unavailableReason": {"type": "string", "minLength": 1},
+        "input": {"$ref": "#/definitions/input"},
+        "outputSchema": {"type": "object"},
+        "exitCodes": {
+          "type": "object",
+          "required": ["0", "1", "2"],
+          "properties": {
+            "0": {"const": "command completed"},
+            "1": {"const": "execution failed"},
+            "2": {"const": "valid report with violations"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "patternProperties": {"^x-": {}},
+      "additionalProperties": false
+    }
+  }
+}

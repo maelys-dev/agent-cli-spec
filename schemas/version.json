@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/maelys-dev/agent-cli-spec/schemas/version.json",
+  "title": "agent-cli/v2 version data",
+  "type": "object",
+  "required": ["product", "program", "version", "contract", "cliApi", "framework"],
+  "properties": {
+    "product": {"type": "string", "minLength": 1},
+    "program": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "contract": {"const": "agent-cli/v2"},
+    "cliApi": {"type": "integer", "minimum": 1},
+    "framework": {"type": "string"}
+  },
+  "patternProperties": {"^x-": {}},
+  "additionalProperties": false
+}

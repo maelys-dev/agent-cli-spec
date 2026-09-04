@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/maelys-dev/agent-cli-spec/schemas/envelope.json",
+  "title": "agent-cli/v2 envelope",
+  "description": "A success envelope (stdout) or a failure envelope (stderr).",
+  "oneOf": [{"$ref": "#/definitions/success"}, {"$ref": "#/definitions/failure"}],
+  "definitions": {
+    "head": {
+      "schemaVersion": {"const": 2},
+      "contract": {"const": "agent-cli/v2"},
+      "command": {"type": "string", "minLength": 1}
+    },
+    "success": {
+      "type": "object",
+      "required": ["schemaVersion", "contract", "command", "ok", "exitCode", "data"],
+      "properties": {
+        "schemaVersion": {"const": 2},
+        "contract": {"const": "agent-cli/v2"},
+        "command": {"type": "string", "minLength": 1},
+        "ok": {"const": true},
+        "exitCode": {"enum": [0, 2]},
+        "data": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "failure": {
+      "type": "object",
+      "required": ["schemaVersion", "contract", "command", "ok", "exitCode", "error"],
+      "properties": {
+        "schemaVersion": {"const": 2},
+        "contract": {"const": "agent-cli/v2"},
+        "command": {"type": "string", "minLength": 1},
+        "ok": {"const": false},
+        "exitCode": {"type": "integer", "minimum": 1},
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+            "message": {"type": "string", "minLength": 1},
+            "hint": {"type": "string", "minLength": 1},
+            "issues": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": {"type": "string"},
+                  "path": {"type": ["string", "array"]},
+                  "message": {"type": "string"}
+                }
+              }
+            }
+          },
+          "patternProperties": {"^x-": {}},
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
