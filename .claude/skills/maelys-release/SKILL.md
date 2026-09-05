@@ -6,7 +6,7 @@ description: Release a Maelys product through the shared maelys-release socle, o
 # Releasing a Maelys product
 
 The product is `agent-cli-spec`; its release mechanics come from maelys-release
-v0.7.0 (`docs/conventions.md` there is normative).
+untagged (`docs/conventions.md` there is normative).
 
 ## Cut a release
 
@@ -16,7 +16,7 @@ v0.7.0 (`docs/conventions.md` there is normative).
    that will be tagged.
 2. Merge through a pull request with green CI.
 3. Run `bin/maelys-release preflight .` from a maelys-release checkout at
-   v0.7.0; it exits 2 on anything the workflow would refuse (signing
+   untagged; it exits 2 on anything the workflow would refuse (signing
    configuration, previous tag, existing `vX.Y.Z`, `release` environment
    not limited to tags `v*`).
 4. Tag the merge commit: `git tag -s vX.Y.Z -m "agent-cli-spec X.Y.Z"`, then
