@@ -106,7 +106,8 @@ class KitTest(unittest.TestCase):
         for defect, expected in (("exit-codes", "exit codes are the contract's"),
                                  ("extra-member", "matches schemas/describe.json"),
                                  ("code-drift", "INVALID_COMMAND"),
-                                 ("hidden-leak", "hidden option")):
+                                 ("hidden-leak", "hidden option"),
+                                 ("text-on-stderr", "text success")):
             with self.subTest(defect=defect):
                 completed = kit(sys.executable, str(FIXTURE), "--json", env={"CONFORMANT_BREAK": defect})
                 self.assertEqual(completed.returncode, 1)

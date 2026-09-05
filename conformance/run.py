@@ -307,6 +307,11 @@ def run_kit(program: Program) -> Report:
         report.add("help data has text and commands",
                    isinstance(data.get("text"), str) and bool(data.get("text")) and isinstance(data.get("commands"), list))
         report.add("--help equals help", program.run("--help", "--format", "json").stdout == help_run.stdout)
+    for words in (("version",), ("help",), ("describe", "--summary")):
+        text_run = program.run(*words, "--format", "text", "--non-interactive")
+        report.add(f"text success of {' '.join(words)} is on stdout with stderr empty",
+                   text_run.returncode == 0 and text_run.stdout.strip() != "" and text_run.stderr.strip() == "",
+                   f"exit {text_run.returncode}, stdout {text_run.stdout[:40]!r}, stderr {text_run.stderr[:80]!r}")
     # ---- the failures the contract prescribes ----
     check_failure(report, "unknown command fails with INVALID_COMMAND", program.run("no-such-command", "--json"), "INVALID_COMMAND")
     check_failure(report, "unsupported option fails with VALIDATION_FAILED",

@@ -207,7 +207,7 @@ def main(argv):
         data = {"mode": "apply" if "--apply" in options else "plan", "changed": False}
         text = f"note: {data['mode']}\n"
     if fmt == "text":
-        sys.stdout.write(text)
+        (sys.stderr if BREAK == "text-on-stderr" else sys.stdout).write(text)
     elif fmt == "jsonl":
         for record in data["records"]:
             sys.stdout.write(json.dumps(record, separators=(",", ":")) + "\n")
