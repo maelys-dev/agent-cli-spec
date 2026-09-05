@@ -174,37 +174,50 @@ Every program accepts, on every command:
 | `--pager auto\|always\|never` | pager for the text rendering when stdout is a terminal (default `auto`) |
 | `--help` | the help of the selected command |
 
-Progress and details follow git's example. In text mode a program MAY show
-the progress of a long run on stderr: with `--progress auto`, the default,
-only when stderr is a terminal, so that a human sees it and a pipe or a log
-does not; `always` forces it, `never` suppresses it. Progress is transient:
-the program finishes or erases it before it exits, and never writes it to
-stdout. `--verbose` adds the details of the run on stderr, what the program
-does, waits for and skips, one line each, default silent, whatever stderr
-is. Under `--format json` or `jsonl` both options are accepted and write
-nothing, so that an agent's envelope stays alone on its stream. A program
-that has nothing to show accepts both and produces nothing more, never an
-error. A progress or detail line is never an envelope and never starts with
-`PROGRAM: [`, the rendering of a failure; both are colored under the same
-rule as that rendering (`--color`, `NO_COLOR`, `TERM=dumb`). Neither is a
-rendering option: a `protocol-stream` command accepts them and keeps its
-diagnostics on stderr as section 9 requires, and a delegate receives them
-verbatim with the rest of its arguments. One spelling across products, as
-for `--apply`: a product MUST NOT declare another option for the same
-intents; a finer diagnostic (`--debug`, a trace) is a product option with its
-own meaning. An agent checks that `globalOptions` lists them before passing
-them: a program pinned to an earlier tag of this contract does not have them.
+None of these options is repeatable; an option with a value takes exactly
+the choices shown, whatever name the catalog gives its argument.
+
+Progress and details follow the example of git's progress and of `--color
+auto`. In text mode a program MAY show the progress of a long run on stderr:
+with `--progress auto`, the default, only when stderr is a terminal, so that
+a human sees it and a pipe or a log does not; `always` forces it, `never`
+suppresses it. Progress is transient: the program finishes or erases it
+before it exits, and never writes it to stdout. `--verbose` adds the details
+of the run on stderr, what the program does, waits for and skips, one line
+each, default silent, whatever stderr is; a detail line SHOULD carry a
+distinct prefix (`PROGRAM: `, as git's `remote: `). Under `--format json` or
+`jsonl` both options are accepted and write nothing, so that an agent's
+envelope stays alone on its stream. A program that has nothing to show
+accepts both and produces nothing more, never an error. A progress or detail
+line is never an envelope and never starts with `PROGRAM: [`, the rendering
+of a failure; both are colored under the same rule as that rendering
+(`--color`, `NO_COLOR`, `TERM=dumb`). Neither is a rendering option: a
+`protocol-stream` command accepts them and keeps its diagnostics on stderr
+as section 9 requires, and a delegate receives them verbatim with the rest
+of its arguments. One spelling across products, as for `--apply`: a product
+MUST NOT declare another option for the same intents; a finer diagnostic
+(`--debug`, a trace) is a product option with its own meaning. An agent
+checks that `globalOptions` lists them before passing them: a program pinned
+to an earlier tag of this contract does not have them.
 
 A pager follows git too. In text mode, with `--pager auto`, the default, a
 program MAY send its rendering through a pager when stdout is a terminal, so
-that a human browses a long rendering as `git log` is browsed; the pager is
-the command named by `PAGER`, `less` when unset, and a short rendering passes
-through when the pager allows it (`less -F`). `never` disables it; `always`
-pages even when stdout is not a terminal, as `git --paginate` does. The pager
-receives the rendering that would have gone to stdout, unchanged; it changes
-neither the exit code nor the failure rendering, which stays on stderr.
-Under `--format json` or `jsonl` the option is accepted and nothing is paged.
-A program without a pager accepts the option and writes to stdout as before.
+that a human browses a long rendering as `git log` is browsed. A pager is
+never started when stdout is not a terminal, as git never does; `always`
+pages whenever stdout is a terminal, even where a product setting would
+disable it; `never` disables it. `--non-interactive` implies `--pager never`:
+a pager waits for a human, and the option promises none. The pager is the
+command named by `PAGER`; an empty `PAGER` disables it; when it is unset the
+program runs `less` and sets `LESS=FRX` unless `LESS` is set, as git does, so
+that a short rendering passes through and colors survive. When the pager
+cannot be started, the rendering goes to stdout unchanged. The pager receives
+the rendering that would have gone to stdout, colored as `--color` decided
+on that stdout, not on the pager's pipe; it changes neither the exit code
+nor the failure rendering, which stays on stderr. Under `--format json` or
+`jsonl` the option is accepted and nothing is paged. `--pager` is a
+rendering option: a `protocol-stream` command refuses it when given, as
+section 9 says, and a delegate receives it verbatim. A program without a
+pager accepts the option and writes to stdout as before.
 
 `--format jsonl` is accepted only by `json-records` commands. A
 `protocol-stream` command refuses every rendering option. An implementation
@@ -253,10 +266,13 @@ language; `error.hint` gives the next safe action and SHOULD be present;
 failures. `data` is governed by the descriptor's `outputSchema`. A
 `json-records` command renders `{"count": N, "records": [...]}` in the
 envelope, one compact record per line with `--format jsonl`, and in text one
-row per record: when stdout is a terminal it MAY add a header, align columns
-and color, and pages as section 5 says; otherwise it renders one plain line
-per record, fields separated by tabs, no header, so that `wc -l`, `cut` and
-`grep` see the records and nothing else. The stable machine form is `jsonl`.
+row per record plus, when stdout is a terminal, an optional header; there it
+MAY align columns and color, and pages as section 5 says. Into a pipe it
+renders one plain line per record: the record's scalar fields in the order
+of the descriptor's `outputSchema`, separated by tabs, a nested value as
+compact JSON, a tab or a line break inside a field escaped as `\t` and `\n`,
+so that a record is exactly one line and `wc -l`, `cut` and `grep` see the
+records and nothing else. The stable machine form is `jsonl`.
 
 Text rendering of a failure is `PROGRAM: [CODE] message` on stderr, followed
 by `Hint: ...` when present, colored on a terminal unless `--color never`,
