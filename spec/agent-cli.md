@@ -178,9 +178,16 @@ stdout, and only in text mode: under `--format json` or `jsonl` the option is
 accepted and writes nothing, so that an agent's envelope stays alone on its
 stream. A program that has nothing to say accepts the option and produces
 nothing more, never an error. A diagnostic line is never an envelope and
-never starts with `PROGRAM: [`, the rendering of a failure; `--color`
-applies to it. One spelling across products, as for `--apply`: a product
-does not invent another name for the same intent.
+never starts with `PROGRAM: [`, the rendering of a failure; it is colored
+under the same rule as that rendering (`--color`, `NO_COLOR`, `TERM=dumb`).
+`--verbose` is not a rendering option: a `protocol-stream` command accepts
+it and keeps its diagnostics on stderr as section 9 requires, and a delegate
+receives it verbatim with the rest of its arguments. One spelling across
+products, as for `--apply`: a product MUST NOT declare another option for
+the same intent; a finer diagnostic (`--debug`, a trace) is a product option
+with its own meaning. An agent checks that `globalOptions` lists `--verbose`
+before passing it: a program pinned to an earlier tag of this contract does
+not have it.
 
 `--format jsonl` is accepted only by `json-records` commands. A
 `protocol-stream` command refuses every rendering option. An implementation
@@ -240,7 +247,8 @@ The format selects the rendering, never the stream. In text mode as in JSON,
 the rendering of a success goes to stdout and the rendering of a failure to
 stderr. A validation that found violations (exit `2`, section 8) is a
 success: its verdict is data, on stdout in every format. stderr carries what
-accompanies the run, failure envelopes and diagnostics, never the result.
+accompanies the run, failure envelopes and, in text mode, the diagnostics of
+`--verbose` (section 5), never the result.
 
 ## 8. Exit codes and error codes
 

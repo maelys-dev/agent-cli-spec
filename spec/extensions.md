@@ -47,15 +47,12 @@ preferable to a new effect.
 ## Global options
 
 A product MAY accept more transport options on every command (a repository
-path, an identity, a receipt). They MUST be listed in `globalOptions` of the
-catalog with the same shape as the trunk's, and MUST NOT be spelled like a
-trunk option with another meaning.
-
-An implementation SHOULD offer a product an entry point that adds such an
-option to `globalOptions` and accepts it on every command. Until it does, a
-product that declares the same option, with one spelling and one shape, in
-`input.options` of every command that accepts it implements this clause
-conformantly: `describe` lists the option wherever it applies, and an agent
-builds its invocation from `input` as always. The kit checks that the
-trunk's options are in `globalOptions`; it accepts any product option listed
-next to them and any repetition in `input.options`.
+path, an identity, a receipt). Such an option MUST have one spelling and one
+shape wherever it appears, and MUST NOT be spelled like a trunk option with
+another shape or meaning. It is declared either in `globalOptions` of the
+catalog, with the same shape as the trunk's, or in `input.options` of every
+command that accepts it; an implementation SHOULD offer the product the
+first form. Either way `describe` lists the option wherever it applies and
+an agent builds its invocation from `input` as always. The kit checks that
+the trunk's options are in `globalOptions` with the trunk's shape, and that
+no option of any command borrows a trunk spelling with another shape.

@@ -9,17 +9,26 @@
   nothing more. Decision: several products need a progress diagnostic for
   humans during long network work, and one spelling across products is what
   the contract exists for, as for `--apply`; leaving the name to each product
-  would have cost that consistency for no gain. A program conformant to
-  2.2.1 moves to 2.3.0 by declaring `--verbose` in `globalOptions` and
-  accepting it. The kit checks the declaration, the silence in JSON mode and
-  the unchanged stdout in text mode.
-- `spec/extensions.md`, "Global options": an implementation SHOULD offer a
-  product an entry point that adds an option to `globalOptions`; until it
-  does, declaring the same option in `input.options` of every command that
-  accepts it is a conformant implementation of the clause. Decision: this
-  documents what the reference implementations allow today instead of
-  requiring two frameworks to change before the clause is usable again; the
-  MUST stays on the shape and the spelling, the entry point is a SHOULD.
+  would have cost that consistency for no gain. The alternative, diagnostics
+  on stderr in JSON mode too, was rejected: a failure envelope lives on
+  stderr, so any diagnostic there would break the parsing of stderr on
+  failure unless a framing rule changed every consumer; an agent that wants
+  machine progress has `jsonl` records. A `protocol-stream` command accepts
+  the option and keeps its diagnostics on stderr; a delegate receives it
+  verbatim. An agent checks `globalOptions` before passing `--verbose`. A
+  program conformant to 2.2.1 moves to 2.3.0 by declaring `--verbose` in
+  `globalOptions` and accepting it. The kit checks the declaration and its
+  shape, the silence in JSON and jsonl modes on success and on failure, the
+  unchanged stdout in text mode, `--verbose=false`, and that no command
+  borrows a trunk spelling with another shape.
+- `spec/extensions.md`, "Global options": the MUST lands on one spelling
+  and one shape wherever a product option appears, never a trunk spelling
+  with another shape or meaning; the option is declared in `globalOptions`
+  or in `input.options` of every command that accepts it, and an
+  implementation SHOULD offer the first form. Decision: this documents what
+  the reference implementations allow today instead of requiring two
+  frameworks to change before the clause is usable again, and gives the kit
+  the one part it can verify, the shape of trunk spellings in every command.
 
 ## 2.2.1 — 2026-09-05
 

@@ -196,6 +196,8 @@ def run_kit(program: Program) -> Report:
         if long in GLOBAL_OPTIONS:
             report.add(f"global option {long} has the contract's argument", item.get("argument") == GLOBAL_OPTIONS[long],
                        f"argument {item.get('argument')}")
+            report.add(f"global option {long} is not repeatable", item.get("repeatable") is False,
+                       f"repeatable {item.get('repeatable')!r}")
     global_longs = {item.get("long") for item in catalog.get("globalOptions", [])}
     for command in commands:
         identifier = command["id"]
@@ -209,6 +211,9 @@ def run_kit(program: Program) -> Report:
         if "protocol" in command:
             report.add(f"{identifier}: a protocol belongs to a protocol-stream command",
                        command.get("outputMode") == "protocol-stream")
+        clashes = [item.get("long") for item in command.get("input", {}).get("options", [])
+                   if item.get("long") in GLOBAL_OPTIONS and item.get("argument") != GLOBAL_OPTIONS[item.get("long")]]
+        report.add(f"{identifier}: no option borrows a trunk spelling with another shape", not clashes, f"clashes {clashes}")
         declared_options = {item.get("long") for item in command.get("input", {}).get("options", [])} | global_longs
         declared_operands = {item.get("name") for item in command.get("input", {}).get("operands", [])}
         unresolved = [entry for item in command.get("input", {}).get("options", [])
@@ -302,9 +307,15 @@ def run_kit(program: Program) -> Report:
         report.add("--version equals version", flag.stdout == version.stdout)
         verbose_json = program.run("version", "--verbose", "--json")
         if envelope(report, "--verbose writes nothing in JSON mode", verbose_json, expect_ok=True) is not None:
-            report.add("--verbose leaves the JSON envelope unchanged", verbose_json.stdout == version.stdout)
-        plain_text = program.run("version", "--format", "text")
-        verbose_text = program.run("version", "--verbose", "--format", "text")
+            report.add("--verbose leaves the JSON envelope unchanged", verbose_json.stdout == version.stdout,
+                       f"stdout {verbose_json.stdout[:60]!r}")
+        check_failure(report, "--verbose leaves a JSON failure envelope alone on stderr",
+                      program.run("no-such-command", "--verbose", "--json"), "INVALID_COMMAND")
+        jsonl_verbose = program.run("__complete", "--verbose", "--format", "jsonl", "--non-interactive", "--", "")
+        report.add("--verbose writes nothing in jsonl mode",
+                   jsonl_verbose.returncode == 0 and jsonl_verbose.stderr.strip() == "", jsonl_verbose.stderr[:80])
+        plain_text = program.run("version", "--format", "text", "--non-interactive")
+        verbose_text = program.run("version", "--verbose", "--format", "text", "--non-interactive")
         report.add("--verbose is accepted in text mode and leaves stdout unchanged",
                    verbose_text.returncode == 0 and verbose_text.stdout == plain_text.stdout,
                    f"exit {verbose_text.returncode}, stdout {verbose_text.stdout[:60]!r}")
@@ -312,6 +323,11 @@ def run_kit(program: Program) -> Report:
         report.add("--verbose diagnostics are not failure renderings",
                    not any(line.startswith(failure_prefix) for line in verbose_text.stderr.splitlines()),
                    verbose_text.stderr[:120])
+        verbose_false = program.run("version", "--verbose=false", "--format", "text", "--non-interactive")
+        report.add("--verbose=false is accepted and silent",
+                   verbose_false.returncode == 0 and verbose_false.stdout == plain_text.stdout
+                   and verbose_false.stderr.strip() == "",
+                   f"exit {verbose_false.returncode}, stderr {verbose_false.stderr[:80]!r}")
     help_run = program.run("help", "--format", "json")
     body = envelope(report, "help envelope", help_run, expect_ok=True)
     if body is not None:
