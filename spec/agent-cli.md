@@ -106,10 +106,22 @@ one: an entry starting with `--` names an option, any other entry names an
 operand of `input.operands`); optionally `argument`
 (`name`, `type`, and `choices`, `minimum`, `maximum`, `algorithms`, `pattern`
 as the kind needs), `default` (the single source of the default, as text),
-`group` (all-or-none with the options of the same group). An option without
-`argument` is a flag; `--flag=false` is accepted. Every entry of `requires`
-and `conflictsWith` MUST resolve to an option of the same command or a
-global option, or for `conflictsWith` to an operand of the same command.
+`group` (all-or-none with the options of the same group), `hidden` (boolean,
+absent means false). An option without `argument` is a flag; `--flag=false`
+is accepted. Every entry of `requires` and `conflictsWith` MUST resolve to an
+option of the same command or a global option, or for `conflictsWith` to an
+operand of the same command.
+
+`hidden: true` marks an option that is not shown to humans. A hidden option
+is parsed, validated and constrained like any other option: `requires`,
+`conflictsWith`, `group` and `input.constraints` may name it. It MUST appear
+in `input.options` of every `describe` form, with `hidden: true`. It MUST NOT
+appear in `usage` and `input.synopsis`, in the text of `help COMMAND_ID`,
+nor among the candidates of `__complete`. `help` and the completion are for
+humans; `describe` is for agents and stays complete. This is the symmetry of
+the hidden command: listed by `describe`, never offered. An implementation
+SHOULD emit the member only when it is `true`, so that generated references
+committed by products do not change.
 
 ### Constraints
 
@@ -177,8 +189,9 @@ a JSON failure envelope from a stream command whose stdout it cannot touch.
 
 The completion script calls `PROGRAM __complete -- WORDS...` and falls back to
 the shell's file completion when no candidate is returned. Candidates come
-from the catalog: command words, options not yet given, choices; command
-identifiers after `help` and `describe`; never an unavailable command.
+from the catalog: command words, options not yet given with hidden options
+excluded, choices; command identifiers after `help` and `describe`; never an
+unavailable command.
 
 ## 7. Envelopes
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.2.0 — 2026-09-05
+
+- Add `hidden` on option descriptors: a hidden option is parsed, validated
+  and constrained like any other, appears in `input.options` of every
+  `describe` form with `hidden: true`, and is absent from `usage`,
+  `input.synopsis`, the text of `help COMMAND_ID` and the candidates of
+  `__complete`. Absent means false; implementations emit the member only
+  when true. `schemas/describe.json`, the conformant fixture and the kit
+  carry the contract: the kit checks every hidden option of a catalog. This
+  is a compatible addition to `agent-cli/v2`; existing documents are
+  unchanged.
+
 ## 2.1.0 — 2026-09-04
 
 - Specify token-efficient namespace discovery with `describe --summary

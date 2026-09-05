@@ -83,7 +83,8 @@
         "conflictsWith": {"type": "array", "items": {"type": "string"}},
         "argument": {"$ref": "#/definitions/argument"},
         "default": {"type": "string"},
-        "group": {"type": "string"}
+        "group": {"type": "string"},
+        "hidden": {"type": "boolean"}
       },
       "patternProperties": {"^x-": {}},
       "additionalProperties": false

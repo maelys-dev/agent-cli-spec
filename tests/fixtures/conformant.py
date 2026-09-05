@@ -19,11 +19,13 @@ PROGRAM = "conformant"
 EXIT_CODES = {"0": "command completed", "1": "execution failed", "2": "valid report with violations"}
 
 
-def option(long, summary, argument=None, default=None, requires=(), conflicts=()):
+def option(long, summary, argument=None, default=None, requires=(), conflicts=(), hidden=False):
     item = {"long": long, "required": False, "repeatable": False, "summary": summary,
             "requires": list(requires), "conflictsWith": list(conflicts)}
     if argument:
         item["argument"] = argument
+    if hidden:
+        item["hidden"] = True
     if default is not None:
         item["default"] = default
     return item
@@ -58,7 +60,8 @@ CATALOG = [
              option("--prefix", "Select a command namespace.",
                     {"name": "PREFIX", "type": "string",
                      "pattern": "^[a-z](?:[a-z0-9.-]*[a-z0-9-])?$"},
-                    requires=["--summary"], conflicts=["COMMAND_ID"])],
+                    requires=["--summary"], conflicts=["COMMAND_ID"]),
+             option("--trace", "Trace the catalog lookup.", hidden=True)],
             [{"kind": "requires", "options": ["--prefix", "--summary"]}]),
     command("completion", ["completion"], "completion SHELL", "Completion script.", "read",
             [{"name": "SHELL", "required": True, "variadic": False, "summary": "Shell.", "type": "choice",
@@ -73,6 +76,12 @@ if BREAK == "exit-codes":
     CATALOG[1]["exitCodes"] = {"0": "command completed"}
 if BREAK == "extra-member":
     CATALOG[1]["repository"] = "none"
+if BREAK == "hidden-leak":
+    CATALOG[2]["usage"] = CATALOG[2]["input"]["synopsis"] = CATALOG[2]["usage"] + " [--trace]"
+
+
+def offered(item):
+    return BREAK == "hidden-leak" or not item.get("hidden")
 
 
 def envelope(command_id, ok, exit_code, payload, compact):
@@ -149,8 +158,12 @@ def main(argv):
                 "cliApi": 1, "framework": "fixture"}
         text = f"{PROGRAM} 1.0.0\n"
     elif identifier == "help":
-        data = {"text": "usage\n", "commands": [item["id"] for item in CATALOG if not item["hidden"]]}
-        text = data["text"]
+        text = "usage\n"
+        if operands and operands[0] in by_id:
+            target = by_id[operands[0]]
+            text = target["usage"] + "\n" + "".join(f"  {item['long']}  {item['summary']}\n"
+                                                 for item in target["input"]["options"] if offered(item))
+        data = {"text": text, "commands": [item["id"] for item in CATALOG if not item["hidden"]]}
     elif identifier == "describe":
         data = {"schemaVersion": 1, "program": PROGRAM, "product": "Conformant", "version": "1.0.0",
                 "contract": "agent-cli/v2", "cliApi": 1, "framework": "fixture"}
@@ -180,7 +193,14 @@ def main(argv):
         text = data["script"]
     elif identifier == "complete.candidates":
         current = operands[-1] if operands else ""
-        matching = sorted({item["pattern"][0] for item in CATALOG if not item["hidden"] and item["pattern"][0].startswith(current)})
+        given = operands[:-1]
+        target = next((item for item in CATALOG if given and given[:len(item["pattern"])] == item["pattern"]), None)
+        if target is not None:
+            longs = {item["long"] for item in target["input"]["options"] if offered(item)}
+            longs |= {item["long"] for item in GLOBAL_OPTIONS}
+            matching = sorted(long for long in longs - set(given) if long.startswith(current))
+        else:
+            matching = sorted({item["pattern"][0] for item in CATALOG if not item["hidden"] and item["pattern"][0].startswith(current)})
         data = {"count": len(matching), "records": [{"word": word} for word in matching]}
         text = "".join(word + "\n" for word in matching)
     else:

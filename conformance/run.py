@@ -101,6 +101,68 @@ def check_failure(report: Report, name: str, completed: subprocess.CompletedProc
     report.add(name, got == code, "" if got == code else f"code {got}, expected {code}")
 
 
+def hidden_option_invocation(item: dict) -> list[str] | None:
+    """The words that pass a hidden option with a valid value, or None when the kit cannot choose one."""
+    long = item.get("long")
+    argument = item.get("argument")
+    if not argument:
+        return [long]
+    kind = argument.get("type")
+    if argument.get("choices"):
+        return [f"{long}={argument['choices'][0]}"]
+    if kind in ("string", "path"):
+        return [f"{long}=x"]
+    if kind in ("integer", "unsigned"):
+        return [f"{long}={argument.get('minimum', 1)}"]
+    return None
+
+
+def check_hidden_options(report: Report, program: Program, command: dict) -> None:
+    """A hidden option is listed by describe, never offered to humans, and accepted."""
+    identifier = command["id"]
+    options = command.get("input", {}).get("options", [])
+    operands = command.get("input", {}).get("operands", [])
+    hidden = [item for item in options if item.get("hidden") is True]
+    if not hidden:
+        return
+    for item in hidden:
+        long = item.get("long")
+        report.add(f"{identifier}: hidden option {long} is absent from usage and input.synopsis",
+                   long not in str(command.get("usage", "")) and long not in str(command.get("input", {}).get("synopsis", "")))
+        help_one = program.run("help", identifier, "--format", "json", "--non-interactive")
+        help_body = envelope(report, f"{identifier}: help {identifier} envelope", help_one, expect_ok=True)
+        if help_body is not None:
+            report.add(f"{identifier}: hidden option {long} is absent from the help text",
+                       long not in str(help_body["data"].get("text", "")))
+    complete = program.run("__complete", "--format", "json", "--non-interactive", "--", *command.get("pattern", []), "--")
+    complete_body = envelope(report, f"{identifier}: __complete after the pattern", complete, expect_ok=True)
+    if complete_body is not None:
+        offered = {record.get("word") for record in complete_body["data"].get("records", [])}
+        for item in hidden:
+            report.add(f"{identifier}: hidden option {item.get('long')} is not a completion candidate",
+                       item.get("long") not in offered, f"offered {sorted(offered)}")
+        visible = {item.get("long") for item in options if not item.get("hidden")}
+        if visible:
+            report.add(f"{identifier}: __complete offers a visible option where it hides the hidden ones",
+                       bool(visible & offered), f"offered {sorted(offered)}, visible {sorted(visible)}")
+    if command.get("effect") != "read" or any(item.get("required") for item in options) \
+            or any(item.get("required") for item in operands):
+        return
+    for item in hidden:
+        words = hidden_option_invocation(item)
+        if words is None or item.get("requires"):
+            continue
+        accepted = program.run(*command.get("pattern", []), *words, "--format", "json", "--non-interactive")
+        code = ""
+        if accepted.returncode != 0:
+            try:
+                code = json.loads(accepted.stderr or "{}").get("error", {}).get("code", "")
+            except json.JSONDecodeError:
+                code = accepted.stderr[:80]
+        report.add(f"{identifier}: hidden option {item.get('long')} is accepted",
+                   accepted.returncode == 0 or code not in ("", "VALIDATION_FAILED"), f"exit {accepted.returncode} {code}")
+
+
 def run_kit(program: Program) -> Report:
     report = Report()
     # ---- describe: the catalog, the summary, each command ----
@@ -157,6 +219,7 @@ def run_kit(program: Program) -> Report:
                                (entry in declared_options if entry.startswith("--") else entry in declared_operands))]
         report.add(f"{identifier}: requires and conflictsWith name declared options or operands", not unresolved,
                    f"unresolved {unresolved}")
+        check_hidden_options(report, program, command)
         one = program.run("describe", identifier, "--format", "json", "--non-interactive")
         body = envelope(report, f"{identifier}: describe {identifier}", one, expect_ok=True)
         if body is not None:
