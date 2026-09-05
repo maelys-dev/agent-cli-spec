@@ -225,6 +225,12 @@ by `Hint: ...` when present, colored on a terminal unless `--color never`,
 `NO_COLOR` or `TERM=dumb` applies. Nothing else is ever written to a
 protocol stream's stdout.
 
+The format selects the rendering, never the stream. In text mode as in JSON,
+the rendering of a success goes to stdout and the rendering of a failure to
+stderr. A validation that found violations (exit `2`, section 8) is a
+success: its verdict is data, on stdout in every format. stderr carries what
+accompanies the run, failure envelopes and diagnostics, never the result.
+
 ## 8. Exit codes and error codes
 
 Exit codes: `0` completed, `1` execution failure, `2` a validation correctly

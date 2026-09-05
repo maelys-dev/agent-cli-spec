@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.1 — 2026-09-05
+
+- Clarify section 7: the format selects the rendering, never the stream. In
+  text mode as in JSON, a success renders on stdout and a failure on stderr;
+  a validation that found violations (exit 2) is a success whose verdict is
+  data on stdout in every format. The kit checks that the text rendering of
+  `version`, `help` and `describe --summary` leaves stderr empty. No
+  behavior of a conformant implementation changes.
+
 ## 2.2.0 — 2026-09-05
 
 - Add `hidden` on option descriptors: a hidden option is parsed, validated
