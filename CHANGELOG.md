@@ -26,6 +26,15 @@
   silence in JSON and jsonl modes on success and on failure, the unchanged
   stdout in text mode, `--progress never` and `--verbose=false`, and that no
   command borrows a trunk spelling with another shape.
+- Add `--pager auto|always|never` to the trunk, on git's example too: in
+  text mode a program MAY send its rendering through the pager named by
+  `PAGER` (`less` when unset) when stdout is a terminal, so a human browses
+  a long rendering as `git log` is browsed; `never` disables it, `always`
+  pages even into a pipe as `git --paginate` does. Nothing is paged under
+  `--format json` or `jsonl`; a program without a pager accepts the option
+  and writes to stdout as before. The kit checks the declaration and shape,
+  the untouched envelope in JSON mode and the untouched stdout with `never`;
+  paging itself needs a terminal the kit does not have.
 - `spec/extensions.md`, "Global options": the MUST lands on one spelling
   and one shape wherever a product option appears, never a trunk spelling
   with another shape or meaning; the option is declared in `globalOptions`

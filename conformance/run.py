@@ -32,6 +32,7 @@ GLOBAL_OPTIONS = {
     "--format": {"name": "VALUE", "type": "choice", "choices": ["text", "json", "jsonl"]},
     "--json": None, "--compact": None, "--pretty": None, "--non-interactive": None, "--verbose": None,
     "--progress": {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
+    "--pager": {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
     "--color": {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
     "--help": None,
 }
@@ -340,6 +341,15 @@ def run_kit(program: Program) -> Report:
                    progress_never.returncode == 0 and progress_never.stdout == plain_text.stdout
                    and progress_never.stderr.strip() == "",
                    f"exit {progress_never.returncode}, stderr {progress_never.stderr[:80]!r}")
+        pager_json = program.run("version", "--pager", "always", "--json")
+        if envelope(report, "--pager always pages nothing in JSON mode", pager_json, expect_ok=True) is not None:
+            report.add("--pager leaves the JSON envelope unchanged", pager_json.stdout == version.stdout,
+                       f"stdout {pager_json.stdout[:60]!r}")
+        pager_never = program.run("version", "--pager=never", "--format", "text", "--non-interactive")
+        report.add("--pager never is accepted and leaves stdout unchanged",
+                   pager_never.returncode == 0 and pager_never.stdout == plain_text.stdout
+                   and pager_never.stderr.strip() == "",
+                   f"exit {pager_never.returncode}, stdout {pager_never.stdout[:60]!r}")
         verbose_false = program.run("version", "--verbose=false", "--format", "text", "--non-interactive")
         report.add("--verbose=false is accepted and silent",
                    verbose_false.returncode == 0 and verbose_false.stdout == plain_text.stdout

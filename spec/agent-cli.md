@@ -171,6 +171,7 @@ Every program accepts, on every command:
 | `--color auto\|always\|never` | ANSI colors on terminals (default `auto`) |
 | `--progress auto\|always\|never` | progress of a long run on stderr, in text mode, when stderr is a terminal (default `auto`) |
 | `--verbose` | details of the run on stderr, in text mode only (default silent) |
+| `--pager auto\|always\|never` | pager for the text rendering when stdout is a terminal (default `auto`) |
 | `--help` | the help of the selected command |
 
 Progress and details follow git's example. In text mode a program MAY show
@@ -193,6 +194,17 @@ for `--apply`: a product MUST NOT declare another option for the same
 intents; a finer diagnostic (`--debug`, a trace) is a product option with its
 own meaning. An agent checks that `globalOptions` lists them before passing
 them: a program pinned to an earlier tag of this contract does not have them.
+
+A pager follows git too. In text mode, with `--pager auto`, the default, a
+program MAY send its rendering through a pager when stdout is a terminal, so
+that a human browses a long rendering as `git log` is browsed; the pager is
+the command named by `PAGER`, `less` when unset, and a short rendering passes
+through when the pager allows it (`less -F`). `never` disables it; `always`
+pages even when stdout is not a terminal, as `git --paginate` does. The pager
+receives the rendering that would have gone to stdout, unchanged; it changes
+neither the exit code nor the failure rendering, which stays on stderr.
+Under `--format json` or `jsonl` the option is accepted and nothing is paged.
+A program without a pager accepts the option and writes to stdout as before.
 
 `--format jsonl` is accepted only by `json-records` commands. A
 `protocol-stream` command refuses every rendering option. An implementation
