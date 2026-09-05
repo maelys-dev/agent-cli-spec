@@ -78,6 +78,17 @@ class ValidatorTest(unittest.TestCase):
         self.assertTrue(validate({**document, "filter": {"kind": "command-prefix", "value": "Agents"}},
                                  SCHEMAS["describe"]))
 
+    def test_hidden_option_schema(self) -> None:
+        example = json.loads((ROOT / "examples" / "maelys-cli.contract.json").read_text())
+        document = {**example["programs"]["maelys"], "version": "0.0.0", "framework": "example", "kind": "catalog"}
+        options = document["commands"][0]["input"]["options"]
+        hidden = {"long": "--trace", "required": False, "repeatable": False, "summary": "Trace.",
+                  "requires": [], "conflictsWith": [], "hidden": True}
+        document["commands"][0]["input"]["options"] = [*options, hidden]
+        self.assertEqual(validate(document, SCHEMAS["describe"]), [])
+        document["commands"][0]["input"]["options"] = [*options, {**hidden, "hidden": "yes"}]
+        self.assertTrue(validate(document, SCHEMAS["describe"]))
+
 
 class KitTest(unittest.TestCase):
     def test_conformant_fixture_passes(self) -> None:
@@ -94,7 +105,8 @@ class KitTest(unittest.TestCase):
     def test_broken_fixtures_fail(self) -> None:
         for defect, expected in (("exit-codes", "exit codes are the contract's"),
                                  ("extra-member", "matches schemas/describe.json"),
-                                 ("code-drift", "INVALID_COMMAND")):
+                                 ("code-drift", "INVALID_COMMAND"),
+                                 ("hidden-leak", "hidden option")):
             with self.subTest(defect=defect):
                 completed = kit(sys.executable, str(FIXTURE), "--json", env={"CONFORMANT_BREAK": defect})
                 self.assertEqual(completed.returncode, 1)
