@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 
 BREAK = os.environ.get("CONFORMANT_BREAK", "")
@@ -36,6 +37,8 @@ GLOBAL_OPTIONS = [
     option("--json", "Alias of --format json."), option("--compact", "One line."), option("--pretty", "Indent."),
     option("--non-interactive", "Never prompt."), option("--verbose", "Details of the run on stderr."),
     option("--progress", "Progress on stderr.", {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
+           "auto"),
+    option("--pager", "Pager on a terminal.", {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
            "auto"),
     option("--color", "Colors.", {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]}, "auto"),
     option("--help", "Help."),
@@ -112,7 +115,7 @@ def main(argv):
             break
         if word.startswith("--"):
             name, _, value = word.partition("=")
-            if name in ("--format", "--color", "--prefix", "--progress") and not value:
+            if name in ("--format", "--color", "--prefix", "--progress", "--pager") and not value:
                 index += 1
                 value = argv[index] if index < len(argv) else ""
             options[name] = value or True
@@ -161,6 +164,9 @@ def main(argv):
     progress = options.get("--progress", "auto")
     if progress not in ("auto", "always", "never"):
         return fail(identifier, "VALIDATION_FAILED", "--progress takes auto, always or never.", fmt, compact)
+    pager = options.get("--pager", "auto")
+    if pager not in ("auto", "always", "never"):
+        return fail(identifier, "VALIDATION_FAILED", "--pager takes auto, always or never.", fmt, compact)
     if (progress == "always" or (progress == "auto" and sys.stderr.isatty())) and (fmt == "text" or BREAK == "progress-json"):
         sys.stderr.write("working... \rworking... done\n")
     if identifier == "version":
@@ -216,7 +222,10 @@ def main(argv):
     else:
         data = {"mode": "apply" if "--apply" in options else "plan", "changed": False}
         text = f"note: {data['mode']}\n"
-    if fmt == "text":
+    if fmt == "text" and (pager == "always" or (pager == "auto" and sys.stdout.isatty())):
+        sys.stdout.flush()
+        subprocess.run(os.environ.get("PAGER", "less -FRX"), shell=True, input=text, text=True, check=False)
+    elif fmt == "text":
         (sys.stderr if BREAK == "text-on-stderr" else sys.stdout).write(text)
     elif fmt == "jsonl":
         for record in data["records"]:
