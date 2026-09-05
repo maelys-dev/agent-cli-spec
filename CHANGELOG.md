@@ -35,6 +35,13 @@
   and writes to stdout as before. The kit checks the declaration and shape,
   the untouched envelope in JSON mode and the untouched stdout with `never`;
   paging itself needs a terminal the kit does not have.
+- Section 7, text rendering of a `json-records` command: one row per record;
+  on a terminal it MAY add a header, align columns and color, and pages;
+  into a pipe it renders one plain line per record, tab-separated fields, no
+  header, so `wc -l`, `cut` and `grep` see the records and nothing else. The
+  former "one human line per record" forbade any table for humans while the
+  stable machine form is `jsonl`; `gh` and `git` show the way, the terminal
+  decides. The kit checks the pipe form: as many lines as `count`.
 - `spec/extensions.md`, "Global options": the MUST lands on one spelling
   and one shape wherever a product option appears, never a trunk spelling
   with another shape or meaning; the option is declared in `globalOptions`
