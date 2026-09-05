@@ -31,6 +31,7 @@ STABLE_CODES = {"INVALID_COMMAND", "VALIDATION_FAILED", "PRECONDITION_FAILED", "
 GLOBAL_OPTIONS = {
     "--format": {"name": "VALUE", "type": "choice", "choices": ["text", "json", "jsonl"]},
     "--json": None, "--compact": None, "--pretty": None, "--non-interactive": None, "--verbose": None,
+    "--progress": {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
     "--color": {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
     "--help": None,
 }
@@ -323,6 +324,22 @@ def run_kit(program: Program) -> Report:
         report.add("--verbose diagnostics are not failure renderings",
                    not any(line.startswith(failure_prefix) for line in verbose_text.stderr.splitlines()),
                    verbose_text.stderr[:120])
+        progress_json = program.run("version", "--progress", "always", "--json")
+        if envelope(report, "--progress always writes nothing in JSON mode", progress_json, expect_ok=True) is not None:
+            report.add("--progress leaves the JSON envelope unchanged", progress_json.stdout == version.stdout,
+                       f"stdout {progress_json.stdout[:60]!r}")
+        progress_always = program.run("version", "--progress", "always", "--format", "text", "--non-interactive")
+        report.add("--progress always is accepted in text mode and leaves stdout unchanged",
+                   progress_always.returncode == 0 and progress_always.stdout == plain_text.stdout,
+                   f"exit {progress_always.returncode}, stdout {progress_always.stdout[:60]!r}")
+        report.add("--progress lines are not failure renderings",
+                   not any(line.startswith(failure_prefix) for line in progress_always.stderr.splitlines()),
+                   progress_always.stderr[:120])
+        progress_never = program.run("version", "--progress=never", "--format", "text", "--non-interactive")
+        report.add("--progress never is accepted and silent",
+                   progress_never.returncode == 0 and progress_never.stdout == plain_text.stdout
+                   and progress_never.stderr.strip() == "",
+                   f"exit {progress_never.returncode}, stderr {progress_never.stderr[:80]!r}")
         verbose_false = program.run("version", "--verbose=false", "--format", "text", "--non-interactive")
         report.add("--verbose=false is accepted and silent",
                    verbose_false.returncode == 0 and verbose_false.stdout == plain_text.stdout

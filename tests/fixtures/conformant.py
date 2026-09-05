@@ -34,7 +34,9 @@ def option(long, summary, argument=None, default=None, requires=(), conflicts=()
 GLOBAL_OPTIONS = [
     option("--format", "Rendering.", {"name": "VALUE", "type": "choice", "choices": ["text", "json", "jsonl"]}, "text"),
     option("--json", "Alias of --format json."), option("--compact", "One line."), option("--pretty", "Indent."),
-    option("--non-interactive", "Never prompt."), option("--verbose", "Diagnostics of the run on stderr."),
+    option("--non-interactive", "Never prompt."), option("--verbose", "Details of the run on stderr."),
+    option("--progress", "Progress on stderr.", {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
+           "auto"),
     option("--color", "Colors.", {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]}, "auto"),
     option("--help", "Help."),
 ]
@@ -110,7 +112,7 @@ def main(argv):
             break
         if word.startswith("--"):
             name, _, value = word.partition("=")
-            if name in ("--format", "--color", "--prefix") and not value:
+            if name in ("--format", "--color", "--prefix", "--progress") and not value:
                 index += 1
                 value = argv[index] if index < len(argv) else ""
             options[name] = value or True
@@ -156,6 +158,11 @@ def main(argv):
     verbose = "--verbose" in options and options["--verbose"] != "false"
     if verbose and (fmt == "text" or BREAK == "verbose-json"):
         sys.stderr.write(f"{PROGRAM}: running {identifier}\n")
+    progress = options.get("--progress", "auto")
+    if progress not in ("auto", "always", "never"):
+        return fail(identifier, "VALIDATION_FAILED", "--progress takes auto, always or never.", fmt, compact)
+    if (progress == "always" or (progress == "auto" and sys.stderr.isatty())) and (fmt == "text" or BREAK == "progress-json"):
+        sys.stderr.write("working... \rworking... done\n")
     if identifier == "version":
         data = {"product": "Conformant", "program": PROGRAM, "version": "1.0.0", "contract": "agent-cli/v2",
                 "cliApi": 1, "framework": "fixture"}
