@@ -218,7 +218,8 @@ def main(argv):
         else:
             matching = sorted({item["pattern"][0] for item in CATALOG if not item["hidden"] and item["pattern"][0].startswith(current)})
         data = {"count": len(matching), "records": [{"word": word} for word in matching]}
-        text = "".join(word + "\n" for word in matching)
+        header = "WORD\n" if sys.stdout.isatty() or BREAK == "header-in-pipe" else ""
+        text = header + "".join(word + "\n" for word in matching)
     else:
         data = {"mode": "apply" if "--apply" in options else "plan", "changed": False}
         text = f"note: {data['mode']}\n"

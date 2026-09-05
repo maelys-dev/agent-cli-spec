@@ -401,6 +401,11 @@ def run_kit(program: Program) -> Report:
         lines = [line for line in jsonl.stdout.splitlines() if line]
         report.add("__complete --format jsonl renders one record per line",
                    jsonl.returncode == 0 and len(lines) == body["data"].get("count") and all(json.loads(line) for line in lines))
+        text_records = program.run("__complete", "--format", "text", "--non-interactive", "--", "")
+        text_lines = text_records.stdout.splitlines()
+        report.add("__complete --format text into a pipe renders one plain line per record, no header",
+                   text_records.returncode == 0 and len(text_lines) == body["data"].get("count"),
+                   f"{len(text_lines)} lines for count {body['data'].get('count')}: {text_records.stdout[:80]!r}")
     return report
 
 

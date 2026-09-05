@@ -252,8 +252,11 @@ language; `error.hint` gives the next safe action and SHOULD be present;
 `error.issues` MAY list `{"code", "path", "message"}` entries for schema
 failures. `data` is governed by the descriptor's `outputSchema`. A
 `json-records` command renders `{"count": N, "records": [...]}` in the
-envelope, one compact record per line with `--format jsonl`, one human line
-per record in text.
+envelope, one compact record per line with `--format jsonl`, and in text one
+row per record: when stdout is a terminal it MAY add a header, align columns
+and color, and pages as section 5 says; otherwise it renders one plain line
+per record, fields separated by tabs, no header, so that `wc -l`, `cut` and
+`grep` see the records and nothing else. The stable machine form is `jsonl`.
 
 Text rendering of a failure is `PROGRAM: [CODE] message` on stderr, followed
 by `Hint: ...` when present, colored on a terminal unless `--color never`,
