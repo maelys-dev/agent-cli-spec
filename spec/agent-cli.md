@@ -169,25 +169,30 @@ Every program accepts, on every command:
 | `--pretty` | `--pretty=false` selects compact JSON |
 | `--non-interactive` | never prompt; fail with `VALIDATION_FAILED` instead of asking |
 | `--color auto\|always\|never` | ANSI colors on terminals (default `auto`) |
-| `--verbose` | diagnostics of the run on stderr, in text mode only (default silent) |
+| `--progress auto\|always\|never` | progress of a long run on stderr, in text mode, when stderr is a terminal (default `auto`) |
+| `--verbose` | details of the run on stderr, in text mode only (default silent) |
 | `--help` | the help of the selected command |
 
-`--verbose` lets a program tell a human what it is doing while it works:
-progress, what it waits for, what it skips. The lines go to stderr, never to
-stdout, and only in text mode: under `--format json` or `jsonl` the option is
-accepted and writes nothing, so that an agent's envelope stays alone on its
-stream. A program that has nothing to say accepts the option and produces
-nothing more, never an error. A diagnostic line is never an envelope and
-never starts with `PROGRAM: [`, the rendering of a failure; it is colored
-under the same rule as that rendering (`--color`, `NO_COLOR`, `TERM=dumb`).
-`--verbose` is not a rendering option: a `protocol-stream` command accepts
-it and keeps its diagnostics on stderr as section 9 requires, and a delegate
-receives it verbatim with the rest of its arguments. One spelling across
-products, as for `--apply`: a product MUST NOT declare another option for
-the same intent; a finer diagnostic (`--debug`, a trace) is a product option
-with its own meaning. An agent checks that `globalOptions` lists `--verbose`
-before passing it: a program pinned to an earlier tag of this contract does
-not have it.
+Progress and details follow git's example. In text mode a program MAY show
+the progress of a long run on stderr: with `--progress auto`, the default,
+only when stderr is a terminal, so that a human sees it and a pipe or a log
+does not; `always` forces it, `never` suppresses it. Progress is transient:
+the program finishes or erases it before it exits, and never writes it to
+stdout. `--verbose` adds the details of the run on stderr, what the program
+does, waits for and skips, one line each, default silent, whatever stderr
+is. Under `--format json` or `jsonl` both options are accepted and write
+nothing, so that an agent's envelope stays alone on its stream. A program
+that has nothing to show accepts both and produces nothing more, never an
+error. A progress or detail line is never an envelope and never starts with
+`PROGRAM: [`, the rendering of a failure; both are colored under the same
+rule as that rendering (`--color`, `NO_COLOR`, `TERM=dumb`). Neither is a
+rendering option: a `protocol-stream` command accepts them and keeps its
+diagnostics on stderr as section 9 requires, and a delegate receives them
+verbatim with the rest of its arguments. One spelling across products, as
+for `--apply`: a product MUST NOT declare another option for the same
+intents; a finer diagnostic (`--debug`, a trace) is a product option with its
+own meaning. An agent checks that `globalOptions` lists them before passing
+them: a program pinned to an earlier tag of this contract does not have them.
 
 `--format jsonl` is accepted only by `json-records` commands. A
 `protocol-stream` command refuses every rendering option. An implementation
@@ -247,8 +252,8 @@ The format selects the rendering, never the stream. In text mode as in JSON,
 the rendering of a success goes to stdout and the rendering of a failure to
 stderr. A validation that found violations (exit `2`, section 8) is a
 success: its verdict is data, on stdout in every format. stderr carries what
-accompanies the run, failure envelopes and, in text mode, the diagnostics of
-`--verbose` (section 5), never the result.
+accompanies the run, failure envelopes and, in text mode, the progress and
+the details of `--progress` and `--verbose` (section 5), never the result.
 
 ## 8. Exit codes and error codes
 

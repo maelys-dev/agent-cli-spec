@@ -110,7 +110,8 @@ class KitTest(unittest.TestCase):
                                  ("code-drift", "INVALID_COMMAND"),
                                  ("hidden-leak", "hidden option"),
                                  ("text-on-stderr", "text success"),
-                                 ("verbose-json", "--verbose writes nothing")):
+                                 ("verbose-json", "--verbose writes nothing"),
+                                 ("progress-json", "--progress always writes nothing")):
             with self.subTest(defect=defect):
                 completed = kit(sys.executable, str(FIXTURE), "--json", env={"CONFORMANT_BREAK": defect})
                 self.assertEqual(completed.returncode, 1)

@@ -2,25 +2,30 @@
 
 ## 2.3.0 — 2026-09-05
 
-- Add `--verbose` to the trunk of global options: diagnostics of the run on
-  stderr, in text mode only, default silent. Under `--format json` or `jsonl`
-  the option is accepted and writes nothing, so an agent's envelope stays
-  alone on its stream; a program with nothing to say accepts it and produces
-  nothing more. Decision: several products need a progress diagnostic for
-  humans during long network work, and one spelling across products is what
-  the contract exists for, as for `--apply`; leaving the name to each product
-  would have cost that consistency for no gain. The alternative, diagnostics
-  on stderr in JSON mode too, was rejected: a failure envelope lives on
-  stderr, so any diagnostic there would break the parsing of stderr on
-  failure unless a framing rule changed every consumer; an agent that wants
-  machine progress has `jsonl` records. A `protocol-stream` command accepts
-  the option and keeps its diagnostics on stderr; a delegate receives it
-  verbatim. An agent checks `globalOptions` before passing `--verbose`. A
-  program conformant to 2.2.1 moves to 2.3.0 by declaring `--verbose` in
-  `globalOptions` and accepting it. The kit checks the declaration and its
-  shape, the silence in JSON and jsonl modes on success and on failure, the
-  unchanged stdout in text mode, `--verbose=false`, and that no command
-  borrows a trunk spelling with another shape.
+- Add `--progress auto|always|never` and `--verbose` to the trunk of global
+  options, on git's example. In text mode a program MAY show the progress of
+  a long run on stderr, by default only when stderr is a terminal, so that a
+  human sees it and a pipe or a log does not; `always` forces it, `never`
+  suppresses it; progress is transient and never on stdout. `--verbose` adds
+  the details of the run on stderr, one line each, default silent. Under
+  `--format json` or `jsonl` both are accepted and write nothing, so an
+  agent's envelope stays alone on its stream; a program with nothing to show
+  accepts both and produces nothing more. Decision: several products need a
+  progress display for humans during long network work, a human never types
+  an option before every long call, so progress follows the terminal as git
+  and `--color auto` do; and one spelling across products is what the
+  contract exists for, as for `--apply`. The alternative, diagnostics on
+  stderr in JSON mode too, was rejected: a failure envelope lives on stderr,
+  so any diagnostic there would break the parsing of stderr on failure
+  unless a framing rule changed every consumer; an agent that wants machine
+  progress has `jsonl` records. A `protocol-stream` command accepts both
+  options and keeps its diagnostics on stderr; a delegate receives them
+  verbatim. An agent checks `globalOptions` before passing them. A program
+  conformant to 2.2.1 moves to 2.3.0 by declaring both in `globalOptions`
+  and accepting them. The kit checks the declarations and their shape, the
+  silence in JSON and jsonl modes on success and on failure, the unchanged
+  stdout in text mode, `--progress never` and `--verbose=false`, and that no
+  command borrows a trunk spelling with another shape.
 - `spec/extensions.md`, "Global options": the MUST lands on one spelling
   and one shape wherever a product option appears, never a trunk spelling
   with another shape or meaning; the option is declared in `globalOptions`
