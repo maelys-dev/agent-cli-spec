@@ -44,6 +44,8 @@ class ValidatorTest(unittest.TestCase):
         self.assertTrue(validate([1, "a"], {"type": "array", "items": {"type": "integer"}}))
 
     def test_example_contract_matches_the_descriptor_schema(self) -> None:
+        # maelys-cli's committed contract, at the trunk of the tag maelys-cli pins (2.2.1: no --verbose yet).
+        # The schema checks the shape of the document, not the presence of the trunk options; the kit does.
         example = json.loads((ROOT / "examples" / "maelys-cli.contract.json").read_text())
         for program in example["programs"].values():
             document = {**program, "version": "0.0.0", "framework": "example"}
