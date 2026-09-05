@@ -30,7 +30,7 @@ STABLE_CODES = {"INVALID_COMMAND", "VALIDATION_FAILED", "PRECONDITION_FAILED", "
                 "NOT_FOUND", "IO_FAILED", "PROCESS_FAILED", "PROTOCOL_FAILED", "UNSUPPORTED", "UNEXPECTED"}
 GLOBAL_OPTIONS = {
     "--format": {"name": "VALUE", "type": "choice", "choices": ["text", "json", "jsonl"]},
-    "--json": None, "--compact": None, "--pretty": None, "--non-interactive": None,
+    "--json": None, "--compact": None, "--pretty": None, "--non-interactive": None, "--verbose": None,
     "--color": {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
     "--help": None,
 }
@@ -300,6 +300,18 @@ def run_kit(program: Program) -> Report:
         report.add("--pretty=false equals --compact", compact.stdout == pretty_false.stdout and compact.stdout.count("\n") <= 1)
         flag = program.run("--version", "--json")
         report.add("--version equals version", flag.stdout == version.stdout)
+        verbose_json = program.run("version", "--verbose", "--json")
+        if envelope(report, "--verbose writes nothing in JSON mode", verbose_json, expect_ok=True) is not None:
+            report.add("--verbose leaves the JSON envelope unchanged", verbose_json.stdout == version.stdout)
+        plain_text = program.run("version", "--format", "text")
+        verbose_text = program.run("version", "--verbose", "--format", "text")
+        report.add("--verbose is accepted in text mode and leaves stdout unchanged",
+                   verbose_text.returncode == 0 and verbose_text.stdout == plain_text.stdout,
+                   f"exit {verbose_text.returncode}, stdout {verbose_text.stdout[:60]!r}")
+        failure_prefix = f"{catalog.get('program')}: ["
+        report.add("--verbose diagnostics are not failure renderings",
+                   not any(line.startswith(failure_prefix) for line in verbose_text.stderr.splitlines()),
+                   verbose_text.stderr[:120])
     help_run = program.run("help", "--format", "json")
     body = envelope(report, "help envelope", help_run, expect_ok=True)
     if body is not None:

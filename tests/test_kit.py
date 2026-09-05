@@ -107,7 +107,8 @@ class KitTest(unittest.TestCase):
                                  ("extra-member", "matches schemas/describe.json"),
                                  ("code-drift", "INVALID_COMMAND"),
                                  ("hidden-leak", "hidden option"),
-                                 ("text-on-stderr", "text success")):
+                                 ("text-on-stderr", "text success"),
+                                 ("verbose-json", "--verbose writes nothing")):
             with self.subTest(defect=defect):
                 completed = kit(sys.executable, str(FIXTURE), "--json", env={"CONFORMANT_BREAK": defect})
                 self.assertEqual(completed.returncode, 1)

@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.3.0 — 2026-09-05
+
+- Add `--verbose` to the trunk of global options: diagnostics of the run on
+  stderr, in text mode only, default silent. Under `--format json` or `jsonl`
+  the option is accepted and writes nothing, so an agent's envelope stays
+  alone on its stream; a program with nothing to say accepts it and produces
+  nothing more. Decision: several products need a progress diagnostic for
+  humans during long network work, and one spelling across products is what
+  the contract exists for, as for `--apply`; leaving the name to each product
+  would have cost that consistency for no gain. A program conformant to
+  2.2.1 moves to 2.3.0 by declaring `--verbose` in `globalOptions` and
+  accepting it. The kit checks the declaration, the silence in JSON mode and
+  the unchanged stdout in text mode.
+- `spec/extensions.md`, "Global options": an implementation SHOULD offer a
+  product an entry point that adds an option to `globalOptions`; until it
+  does, declaring the same option in `input.options` of every command that
+  accepts it is a conformant implementation of the clause. Decision: this
+  documents what the reference implementations allow today instead of
+  requiring two frameworks to change before the clause is usable again; the
+  MUST stays on the shape and the spelling, the entry point is a SHOULD.
+
 ## 2.2.1 — 2026-09-05
 
 - Clarify section 7: the format selects the rendering, never the stream. In

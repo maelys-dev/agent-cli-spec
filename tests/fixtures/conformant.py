@@ -34,7 +34,7 @@ def option(long, summary, argument=None, default=None, requires=(), conflicts=()
 GLOBAL_OPTIONS = [
     option("--format", "Rendering.", {"name": "VALUE", "type": "choice", "choices": ["text", "json", "jsonl"]}, "text"),
     option("--json", "Alias of --format json."), option("--compact", "One line."), option("--pretty", "Indent."),
-    option("--non-interactive", "Never prompt."),
+    option("--non-interactive", "Never prompt."), option("--verbose", "Diagnostics of the run on stderr."),
     option("--color", "Colors.", {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]}, "auto"),
     option("--help", "Help."),
 ]
@@ -153,6 +153,9 @@ def main(argv):
     if fmt == "jsonl" and selected["outputMode"] != "json-records":
         return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
     identifier = selected["id"]
+    verbose = "--verbose" in options and options["--verbose"] != "false"
+    if verbose and (fmt == "text" or BREAK == "verbose-json"):
+        sys.stderr.write(f"{PROGRAM}: running {identifier}\n")
     if identifier == "version":
         data = {"product": "Conformant", "program": PROGRAM, "version": "1.0.0", "contract": "agent-cli/v2",
                 "cliApi": 1, "framework": "fixture"}

@@ -50,3 +50,12 @@ A product MAY accept more transport options on every command (a repository
 path, an identity, a receipt). They MUST be listed in `globalOptions` of the
 catalog with the same shape as the trunk's, and MUST NOT be spelled like a
 trunk option with another meaning.
+
+An implementation SHOULD offer a product an entry point that adds such an
+option to `globalOptions` and accepts it on every command. Until it does, a
+product that declares the same option, with one spelling and one shape, in
+`input.options` of every command that accepts it implements this clause
+conformantly: `describe` lists the option wherever it applies, and an agent
+builds its invocation from `input` as always. The kit checks that the
+trunk's options are in `globalOptions`; it accepts any product option listed
+next to them and any repetition in `input.options`.

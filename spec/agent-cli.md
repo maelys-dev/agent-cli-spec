@@ -169,7 +169,18 @@ Every program accepts, on every command:
 | `--pretty` | `--pretty=false` selects compact JSON |
 | `--non-interactive` | never prompt; fail with `VALIDATION_FAILED` instead of asking |
 | `--color auto\|always\|never` | ANSI colors on terminals (default `auto`) |
+| `--verbose` | diagnostics of the run on stderr, in text mode only (default silent) |
 | `--help` | the help of the selected command |
+
+`--verbose` lets a program tell a human what it is doing while it works:
+progress, what it waits for, what it skips. The lines go to stderr, never to
+stdout, and only in text mode: under `--format json` or `jsonl` the option is
+accepted and writes nothing, so that an agent's envelope stays alone on its
+stream. A program that has nothing to say accepts the option and produces
+nothing more, never an error. A diagnostic line is never an envelope and
+never starts with `PROGRAM: [`, the rendering of a failure; `--color`
+applies to it. One spelling across products, as for `--apply`: a product
+does not invent another name for the same intent.
 
 `--format jsonl` is accepted only by `json-records` commands. A
 `protocol-stream` command refuses every rendering option. An implementation
