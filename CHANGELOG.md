@@ -3,7 +3,7 @@
 ## 2.3.0 — 2026-09-05
 
 - Add `--progress auto|always|never` and `--verbose` to the trunk of global
-  options, on git's example. In text mode a program MAY show the progress of
+  options, on the example of git's progress and of `--color auto`. In text mode a program MAY show the progress of
   a long run on stderr, by default only when stderr is a terminal, so that a
   human sees it and a pipe or a log does not; `always` forces it, `never`
   suppresses it; progress is transient and never on stdout. `--verbose` adds
@@ -22,34 +22,39 @@
   options and keeps its diagnostics on stderr; a delegate receives them
   verbatim. An agent checks `globalOptions` before passing them. A program
   conformant to 2.2.1 moves to 2.3.0 by declaring both in `globalOptions`
-  and accepting them. The kit checks the declarations and their shape, the
-  silence in JSON and jsonl modes on success and on failure, the unchanged
-  stdout in text mode, `--progress never` and `--verbose=false`, and that no
-  command borrows a trunk spelling with another shape.
+  and accepting them. None of the trunk options is repeatable, and their
+  shape is the value type and the choices, whatever the argument's name. The
+  kit checks the declarations and their shape, the silence of both options
+  in JSON and jsonl modes on success and on failure, the unchanged stdout in
+  text mode, `--progress never` and `--verbose=false`, and that no command
+  borrows a trunk spelling with another shape.
 - Add `--pager auto|always|never` to the trunk, on git's example too: in
   text mode a program MAY send its rendering through the pager named by
-  `PAGER` (`less` when unset) when stdout is a terminal, so a human browses
-  a long rendering as `git log` is browsed; `never` disables it, `always`
-  pages even into a pipe as `git --paginate` does. Nothing is paged under
-  `--format json` or `jsonl`; a program without a pager accepts the option
-  and writes to stdout as before. The kit checks the declaration and shape,
-  the untouched envelope in JSON mode and the untouched stdout with `never`;
-  paging itself needs a terminal the kit does not have.
-- Section 7, text rendering of a `json-records` command: one row per record;
-  on a terminal it MAY add a header, align columns and color, and pages;
-  into a pipe it renders one plain line per record, tab-separated fields, no
-  header, so `wc -l`, `cut` and `grep` see the records and nothing else. The
-  former "one human line per record" forbade any table for humans while the
-  stable machine form is `jsonl`; `gh` and `git` show the way, the terminal
-  decides. The kit checks the pipe form: as many lines as `count`.
-- `spec/extensions.md`, "Global options": the MUST lands on one spelling
-  and one shape wherever a product option appears, never a trunk spelling
-  with another shape or meaning; the option is declared in `globalOptions`
-  or in `input.options` of every command that accepts it, and an
-  implementation SHOULD offer the first form. Decision: this documents what
-  the reference implementations allow today instead of requiring two
-  frameworks to change before the clause is usable again, and gives the kit
-  the one part it can verify, the shape of trunk spellings in every command.
+  `PAGER` (`less` with `LESS=FRX` when unset, disabled when empty) when
+  stdout is a terminal, so a human browses a long rendering as `git log` is
+  browsed; a pager is never started when stdout is not a terminal, as git
+  never does; `always` pages whenever stdout is a terminal even where a
+  product setting would disable it, `never` disables it, and
+  `--non-interactive` implies `never`, since a pager waits for a human. When
+  the pager cannot be started the rendering goes to stdout unchanged.
+  Nothing is paged under `--format json` or `jsonl`; `--pager` is a
+  rendering option, refused by a `protocol-stream` command; a program without
+  a pager accepts the option and writes to stdout as before. The kit checks
+  the declaration and shape, the untouched envelope in JSON mode and the
+  untouched stdout with `never` and with `always` into a pipe; paging itself
+  needs a terminal the kit does not have.
+- Section 7, text rendering of a `json-records` command: one row per record
+  plus, on a terminal, an optional header; there it MAY align columns and
+  color, and pages. Into a pipe it renders one plain line per record, the
+  scalar fields in the order of `outputSchema` separated by tabs, nested
+  values as compact JSON, a tab or line break inside a field escaped as `\t`
+  and `\n`, so `wc -l`, `cut` and `grep` see the records and nothing else.
+  The former "one human line per record" forbade any table for humans while
+  the stable machine form is `jsonl`; `gh` and `git` show the way, the
+  terminal decides. This also tightens the pipe form: an implementation that
+  rendered a header or space-aligned columns into a pipe under 2.2.1 changes
+  its text rendering when it moves its pin. The kit checks the pipe form: as
+  many lines as `count`.
 
 ## 2.2.1 — 2026-09-05
 

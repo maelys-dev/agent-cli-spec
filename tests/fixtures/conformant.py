@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -159,14 +160,14 @@ def main(argv):
         return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
     identifier = selected["id"]
     verbose = "--verbose" in options and options["--verbose"] != "false"
-    if verbose and (fmt == "text" or BREAK == "verbose-json"):
-        sys.stderr.write(f"{PROGRAM}: running {identifier}\n")
     progress = options.get("--progress", "auto")
     if progress not in ("auto", "always", "never"):
         return fail(identifier, "VALIDATION_FAILED", "--progress takes auto, always or never.", fmt, compact)
     pager = options.get("--pager", "auto")
     if pager not in ("auto", "always", "never"):
         return fail(identifier, "VALIDATION_FAILED", "--pager takes auto, always or never.", fmt, compact)
+    if verbose and (fmt == "text" or BREAK == "verbose-json"):
+        sys.stderr.write(f"{PROGRAM}: running {identifier}\n")
     if (progress == "always" or (progress == "auto" and sys.stderr.isatty())) and (fmt == "text" or BREAK == "progress-json"):
         sys.stderr.write("working... \rworking... done\n")
     if identifier == "version":
@@ -219,15 +220,24 @@ def main(argv):
             matching = sorted({item["pattern"][0] for item in CATALOG if not item["hidden"] and item["pattern"][0].startswith(current)})
         data = {"count": len(matching), "records": [{"word": word} for word in matching]}
         header = "WORD\n" if sys.stdout.isatty() or BREAK == "header-in-pipe" else ""
-        text = header + "".join(word + "\n" for word in matching)
+        text = header + "".join(word.replace("\t", "\\t").replace("\n", "\\n") + "\n" for word in matching)
     else:
         data = {"mode": "apply" if "--apply" in options else "plan", "changed": False}
         text = f"note: {data['mode']}\n"
-    if fmt == "text" and (pager == "always" or (pager == "auto" and sys.stdout.isatty())):
+    paging = fmt == "text" and pager != "never" and "--non-interactive" not in options and sys.stdout.isatty() \
+        and os.environ.get("PAGER", "less") != ""
+    if paging:
+        env = dict(os.environ)
+        if "PAGER" not in env:
+            env.setdefault("LESS", "FRX")
         sys.stdout.flush()
-        subprocess.run(os.environ.get("PAGER", "less -FRX"), shell=True, input=text, text=True, check=False)
-    elif fmt == "text":
-        (sys.stderr if BREAK == "text-on-stderr" else sys.stdout).write(text)
+        try:
+            subprocess.run(shlex.split(env.get("PAGER", "less")), input=text, text=True, check=False, env=env)
+        except OSError:
+            paging = False
+    if fmt == "text":
+        if not paging:
+            (sys.stderr if BREAK == "text-on-stderr" else sys.stdout).write(text)
     elif fmt == "jsonl":
         for record in data["records"]:
             sys.stdout.write(json.dumps(record, separators=(",", ":")) + "\n")

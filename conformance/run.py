@@ -47,8 +47,8 @@ class Program:
         self.env = {**os.environ, "NO_COLOR": "1"}
         self.env.pop("MAELYS_CLI_FORMAT", None)
 
-    def run(self, *arguments: str) -> subprocess.CompletedProcess:
-        return subprocess.run([*self.command, *arguments], env=self.env, check=False, text=True,
+    def run(self, *arguments: str, env: dict | None = None) -> subprocess.CompletedProcess:
+        return subprocess.run([*self.command, *arguments], env={**self.env, **(env or {})}, check=False, text=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
@@ -165,6 +165,17 @@ def check_hidden_options(report: Report, program: Program, command: dict) -> Non
                    accepted.returncode == 0 or code not in ("", "VALIDATION_FAILED"), f"exit {accepted.returncode} {code}")
 
 
+def trunk_shape(item: dict, expected: dict | None) -> bool:
+    """An option has a trunk option's shape: a flag, or the same value type and choices; never repeatable."""
+    if item.get("repeatable") is not False:
+        return False
+    argument = item.get("argument")
+    if expected is None:
+        return argument is None
+    return isinstance(argument, dict) and argument.get("type") == expected["type"] \
+        and argument.get("choices") == expected["choices"]
+
+
 def run_kit(program: Program) -> Report:
     report = Report()
     # ---- describe: the catalog, the summary, each command ----
@@ -196,10 +207,8 @@ def run_kit(program: Program) -> Report:
     for item in catalog.get("globalOptions", []):
         long = item.get("long")
         if long in GLOBAL_OPTIONS:
-            report.add(f"global option {long} has the contract's argument", item.get("argument") == GLOBAL_OPTIONS[long],
-                       f"argument {item.get('argument')}")
-            report.add(f"global option {long} is not repeatable", item.get("repeatable") is False,
-                       f"repeatable {item.get('repeatable')!r}")
+            report.add(f"global option {long} has the contract's shape", trunk_shape(item, GLOBAL_OPTIONS[long]),
+                       f"argument {item.get('argument')}, repeatable {item.get('repeatable')!r}")
     global_longs = {item.get("long") for item in catalog.get("globalOptions", [])}
     for command in commands:
         identifier = command["id"]
@@ -214,7 +223,7 @@ def run_kit(program: Program) -> Report:
             report.add(f"{identifier}: a protocol belongs to a protocol-stream command",
                        command.get("outputMode") == "protocol-stream")
         clashes = [item.get("long") for item in command.get("input", {}).get("options", [])
-                   if item.get("long") in GLOBAL_OPTIONS and item.get("argument") != GLOBAL_OPTIONS[item.get("long")]]
+                   if item.get("long") in GLOBAL_OPTIONS and not trunk_shape(item, GLOBAL_OPTIONS[item.get("long")])]
         report.add(f"{identifier}: no option borrows a trunk spelling with another shape", not clashes, f"clashes {clashes}")
         declared_options = {item.get("long") for item in command.get("input", {}).get("options", [])} | global_longs
         declared_operands = {item.get("name") for item in command.get("input", {}).get("operands", [])}
@@ -341,6 +350,11 @@ def run_kit(program: Program) -> Report:
                    progress_never.returncode == 0 and progress_never.stdout == plain_text.stdout
                    and progress_never.stderr.strip() == "",
                    f"exit {progress_never.returncode}, stderr {progress_never.stderr[:80]!r}")
+        check_failure(report, "--progress always leaves a JSON failure envelope alone on stderr",
+                      program.run("no-such-command", "--progress", "always", "--json"), "INVALID_COMMAND")
+        jsonl_progress = program.run("__complete", "--progress", "always", "--format", "jsonl", "--non-interactive", "--", "")
+        report.add("--progress always writes nothing in jsonl mode",
+                   jsonl_progress.returncode == 0 and jsonl_progress.stderr.strip() == "", jsonl_progress.stderr[:80])
         pager_json = program.run("version", "--pager", "always", "--json")
         if envelope(report, "--pager always pages nothing in JSON mode", pager_json, expect_ok=True) is not None:
             report.add("--pager leaves the JSON envelope unchanged", pager_json.stdout == version.stdout,
@@ -350,6 +364,11 @@ def run_kit(program: Program) -> Report:
                    pager_never.returncode == 0 and pager_never.stdout == plain_text.stdout
                    and pager_never.stderr.strip() == "",
                    f"exit {pager_never.returncode}, stdout {pager_never.stdout[:60]!r}")
+        pager_always = program.run("version", "--pager", "always", "--format", "text", env={"PAGER": "cat"})
+        report.add("--pager always into a pipe is accepted and leaves stdout unchanged",
+                   pager_always.returncode == 0 and pager_always.stdout == plain_text.stdout
+                   and pager_always.stderr.strip() == "",
+                   f"exit {pager_always.returncode}, stdout {pager_always.stdout[:60]!r}, stderr {pager_always.stderr[:60]!r}")
         verbose_false = program.run("version", "--verbose=false", "--format", "text", "--non-interactive")
         report.add("--verbose=false is accepted and silent",
                    verbose_false.returncode == 0 and verbose_false.stdout == plain_text.stdout
