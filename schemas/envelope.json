@@ -26,7 +26,7 @@
         "contract": {"const": "agent-cli/v2"},
         "command": {"type": "string", "minLength": 1},
         "ok": {"const": false},
-        "exitCode": {"const": 1},
+        "exitCode": {"type": "integer", "minimum": 1},
         "error": {
           "type": "object",
           "required": ["code", "message"],
