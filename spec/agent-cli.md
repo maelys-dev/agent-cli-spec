@@ -53,7 +53,7 @@ members.
 
 `describe --summary --prefix PREFIX` is the token-efficient discovery form
 for a command namespace. `PREFIX` has the command-identifier grammar of
-section 2 without a trailing dot, that is `^[a-z](?:[a-z0-9.-]*[a-z0-9-])?$`.
+section 2 without a trailing dot, that is `^[a-z]([a-z0-9.-]*[a-z0-9-])?$`.
 It selects the command whose identifier equals `PREFIX`, if
 one exists, and every command whose identifier starts with `PREFIX.`; it does
 not perform an arbitrary string-prefix match. The response has `kind:
@@ -147,8 +147,9 @@ MUST match; the implementation enforces it by the means of its choice, a
 regex engine or code, and refuses a mismatch with `VALIDATION_FAILED`. It is
 written in the common subset of ECMA-262 and POSIX ERE: literals, ASCII
 character classes and ranges, `.`, the quantifiers `*`, `+`, `?` and `{m,n}`,
-alternation, unnamed groups, the anchors `^` and `$`; no named group, no
-`\p{...}` class, no lookaround, no back-reference. Written so, the same motif
+alternation, plain groups `(...)`, the anchors `^` and `$`; no named group,
+no non-capturing group `(?:...)`, which POSIX ERE lacks, no `\p{...}` class,
+no lookaround, no back-reference. Written so, the same motif
 reads the same for an agent, which MAY check a value against it before
 invoking, for the conformance kit, and for an implementation that checks it
 by hand.

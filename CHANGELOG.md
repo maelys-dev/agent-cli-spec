@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.3.1 — 2026-09-06
+
+- The motif of `--prefix` in section 1, the schema and the fixture is
+  written `^[a-z]([a-z0-9.-]*[a-z0-9-])?$`, with a plain group: the earlier
+  `(?:...)` is a non-capturing group that POSIX ERE lacks and that section 3
+  excludes from the common dialect, so the specification contradicted
+  itself. Section 3 now names `(?:...)` among the excluded constructs. The
+  two spellings match the same values; the kit accepts either in a catalog,
+  so an implementation that published the earlier one stays conformant. A
+  C implementation that rewrote `(?:` as `(` did the right thing.
+
 ## 2.3.0 — 2026-09-06
 
 - Add `--progress auto|always|never` and `--verbose` to the trunk. Progress

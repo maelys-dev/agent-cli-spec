@@ -446,7 +446,7 @@ def _run_kit(program: Program, report: Report) -> Report:
     report.add("describe declares --prefix",
                prefix_option.get("argument", {}).get("type") == "string"
                and prefix_option.get("argument", {}).get("pattern")
-               == r"^[a-z](?:[a-z0-9.-]*[a-z0-9-])?$"
+               in (r"^[a-z]([a-z0-9.-]*[a-z0-9-])?$", r"^[a-z](?:[a-z0-9.-]*[a-z0-9-])?$")
                and "--summary" in prefix_option.get("requires", [])
                and "COMMAND_ID" in prefix_option.get("conflictsWith", []),
                f"option {prefix_option!r}")
