@@ -169,6 +169,8 @@
         {"if": {"required": ["protocol"]},
          "then": {"properties": {"outputMode": {"const": "protocol-stream"}}}},
         {"if": {"properties": {"effect": {"const": "stream"}}},
+         "then": {"properties": {"outputMode": {"const": "protocol-stream"}}}},
+        {"if": {"properties": {"external": {"const": true}}},
          "then": {"properties": {"outputMode": {"const": "protocol-stream"}}}}
       ],
       "properties": {
