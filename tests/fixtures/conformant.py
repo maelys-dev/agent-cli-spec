@@ -78,12 +78,20 @@ CATALOG = [
             [{"name": "FILE", "required": True, "variadic": False, "summary": "File.", "type": "path"}],
             [option("--apply", "Write.")]),
 ]
+offline = command("offline", ["offline"], "offline", "Unavailable in this build.", "read")
+offline.update(available=False, unavailableReason="fixture build has no offline backend")
+CATALOG.append(offline)
 if BREAK == "exit-codes":
     CATALOG[1]["exitCodes"] = {"0": "command completed"}
 if BREAK == "extra-member":
     CATALOG[1]["repository"] = "none"
 if BREAK == "hidden-leak":
     CATALOG[2]["usage"] = CATALOG[2]["input"]["synopsis"] = CATALOG[2]["usage"] + " [--trace]"
+if BREAK == "missing-output-schema":
+    for item in CATALOG:
+        item.pop("outputSchema")
+if BREAK == "output-schema":
+    CATALOG[1]["outputSchema"]["required"] = ["neverReturned"]
 
 
 def offered(item):
@@ -92,6 +100,10 @@ def offered(item):
 
 def envelope(command_id, ok, exit_code, payload, compact):
     body = {"schemaVersion": 2, "contract": "agent-cli/v2", "command": command_id, "ok": ok, "exitCode": exit_code}
+    if BREAK == "envelope-types":
+        body.update(ok=int(ok), exitCode=False if exit_code == 0 else exit_code)
+    if BREAK == "empty-command":
+        body["command"] = ""
     body["data" if ok else "error"] = payload
     return json.dumps(body, indent=None if compact else 2, separators=(",", ":") if compact else None) + "\n"
 
@@ -240,6 +252,8 @@ def main(argv):
             data.update({"kind": "catalog", "globalOptions": GLOBAL_OPTIONS, "invariants": ["one catalog"],
                          "output": {"contract": "agent-cli/v2", "schemaVersion": 2, "stdout": "success data only",
                                     "stderr": "diagnostics and failure envelopes"}, "commands": CATALOG})
+            if BREAK == "malformed-catalog":
+                data["commands"] = [{"id": "version", "input": None}]
         text = json.dumps(data, indent=2) + "\n"
     elif identifier == "completion":
         data = {"shell": operands[0] if operands else "bash", "script": f"complete -F _c {PROGRAM} # __complete\n"}
@@ -260,11 +274,13 @@ def main(argv):
         data = {"count": len(matching), "records": [{"word": word} for word in matching]}
         header = "WORD\n" if sys.stdout.isatty() or BREAK == "header-in-pipe" else ""
         text = header + record_text(data["records"])
+        if BREAK == "text-garbage":
+            text = "\x1b[31mgarbage\x1b[0m\n" * len(matching)
     else:
         data = {"mode": "apply" if options.get("--apply") else "plan", "changed": False}
         text = f"note: {data['mode']}\n"
     paging = fmt == "text" and pager != "never" and not options.get("--non-interactive", False) \
-        and sys.stdout.isatty() \
+        and (sys.stdout.isatty() or BREAK == "pager-in-pipe" and pager == "always") \
         and os.environ.get("PAGER", "less") != ""
     if paging:
         env = dict(os.environ)
@@ -283,8 +299,10 @@ def main(argv):
         if not paging:
             (sys.stderr if BREAK == "text-on-stderr" else sys.stdout).write(text)
     elif fmt == "jsonl":
+        if BREAK == "jsonl-noise" and (verbose or progress == "always"):
+            sys.stdout.write("diagnostic noise\n")
         for record in data["records"]:
-            sys.stdout.write(json.dumps(record, separators=(",", ":")) + "\n")
+            sys.stdout.write("not-json\n" if BREAK == "malformed-jsonl" else json.dumps(record, separators=(",", ":")) + "\n")
     else:
         sys.stdout.write(envelope(identifier, True, 0, data, compact))
     return 0

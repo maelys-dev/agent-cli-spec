@@ -15,7 +15,7 @@ form that any language can be checked against:
 spec/agent-cli.md       the normative text
 spec/extensions.md      how a product extends it without bending it
 schemas/*.json          the machine-readable form: describe document, envelope, version, records
-conformance/run.py      the kit: drives any program and reports every violation
+conformance/run.py      the kit: drives a program and reports detected violations
 examples/               maelys-cli's committed contract, as an illustration
 ```
 
@@ -25,6 +25,7 @@ examples/               maelys-cli's committed contract, as an illustration
 conformance/run.py /path/to/PROGRAM               # one line per check, exit 1 on any failure
 conformance/run.py node dist/cli.js --json        # the report as JSON
 conformance/run.py PROGRAM --report report.json   # keep the report, print the lines
+conformance/run.py PROGRAM --timeout 20           # seconds per invocation (default 10)
 ```
 
 Large catalogs can be inspected without transferring every descriptor:
@@ -38,6 +39,21 @@ with `content.`. Use `describe COMMAND_ID` afterwards for one full descriptor.
 
 The kit needs `python3` and nothing else. It only runs read commands and
 invocations the contract says must be refused; it never passes `--apply`.
+Each invocation has closed stdin and a timeout; on POSIX, timeout cleanup
+kills its process group, including children holding stdout or stderr open.
+Malformed JSON, invalid UTF-8 and timeouts are failures in the report.
+
+The report covers catalog structure, built-ins and safe hidden-option
+probes. Responses are checked against their declared `outputSchema` when
+the kit supports its keywords and references (a subset of Draft 2020-12,
+with local JSON Pointers and no embedded schema resources). Otherwise the report names
+the unsupported schema as `SKIP` (`passed: null` in JSON); `counts` separates
+passed, failed and skipped checks. A passing report means the executed
+checks passed, not that the entire specification has been proved. The
+`coverage` member names the scope and the remaining implementation tests:
+business behavior, writes, protocol streams, delegates and terminal rendering.
+The fixture's own terminal behavior is exercised by the repository's tests.
+
 An implementation runs it in its own continuous integration on its own
 binaries, pinned to a tag of this repository:
 

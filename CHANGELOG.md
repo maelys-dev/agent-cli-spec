@@ -20,16 +20,19 @@
   follows the original stdout. A protocol-stream command refuses this
   rendering option; a delegate receives it verbatim. Programs without a
   pager accept the option and render directly.
-- None of the trunk options is repeatable. Duplicates fail before execution
-  with `VALIDATION_FAILED`, even with the same value, as section 8 already
-  classed duplication; flags with `=false` do not activate their implied
-  behavior. The kit checks the declarations, the duplicate and invalid-value
-  refusals, the unchanged stdout and the diagnostic silence.
+- None of the trunk options is repeatable. Duplicates fail before execution;
+  flags with `=false` do not activate their implied behavior. The kit checks
+  declarations, duplicate and invalid-value refusals, JSONL record content,
+  unchanged stdout and diagnostic silence. Pager sentinels detect forbidden
+  process creation even when the pager would copy its input unchanged. The
+  fixture is also tested on pseudo-terminals, including false flags, missing
+  or malformed pagers, default LESS settings and machine output modes.
 - Product transport options may be declared in `globalOptions` or repeated
   in `input.options` wherever accepted, with one spelling and shape.
   Implementations should offer the global declaration form; options repeated
   only at command level still require product tests of their common
-  transport semantics. The kit checks trunk collisions.
+  transport semantics. The kit checks trunk collisions and command
+  declarations that repeat a declared product global option.
 - Section 1 says which form of `describe` carries which members: the catalog
   carries `globalOptions`, `invariants` and `output` and full descriptors,
   the command form full descriptors, the summary neither. Section 3 gives
@@ -46,8 +49,25 @@
   does not depend on JSON Schema property ordering. Text layout can evolve
   within v2; invocation semantics and machine forms remain the compatibility
   boundary. Products adopting this tag may need to change their pipe text;
-  consumers requiring stable fields continue to use JSON or JSONL. The kit
-  checks the pipe form against the records of the JSON envelope.
+  consumers requiring stable fields continue to use JSON or JSONL.
+- Harden the kit: JSON equality distinguishes booleans and numbers, integer
+  values include `1.0`, and string lengths are enforced. Conditional schemas
+  distinguish catalogs, summaries and single descriptors, require complete
+  output contracts and unavailable reasons, and preserve `x-` transaction
+  extensions. Fixed API and failure codes now match the normative text.
+  Successful responses are checked against declared output schemas; schemas
+  outside the supported subset are explicitly skipped. Reports describe
+  their coverage and count skipped checks separately from failures.
+- Invalid response structures, malformed JSONL, invalid UTF-8 and timed-out
+  probes produce failures instead of tracebacks or indefinite waits. The
+  per-invocation timeout is configurable with `--timeout` (10 seconds by
+  default); stdin is closed, and POSIX timeout cleanup kills the process
+  group. Completion expectations exclude unavailable and hidden commands.
+  Regression tests include the counterexamples that previously passed the
+  kit despite violating the contract.
+- Include `LICENSE-SPEC` alongside `LICENSE` in release archives. Correct the
+  release instructions to reflect that this repository publishes archives
+  and does not currently declare a Homebrew formula.
 
 Migration: an implementation pinned to 2.2.1 declares and accepts the three
 new options, implements their documented behavior where supported, and
