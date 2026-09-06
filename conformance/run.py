@@ -92,6 +92,18 @@ def envelope(report: Report, name: str, completed: subprocess.CompletedProcess, 
     return body
 
 
+def text_records(records: list[dict]) -> str:
+    """The section 7 pipe form; column order never depends on schema serialization."""
+    columns = sorted({key for record in records for key in record})
+    def cell(value):
+        if isinstance(value, str):
+            escapes = {"\\": "\\\\", "\t": "\\t", "\r": "\\r", "\n": "\\n"}
+            return "".join(escapes.get(char, f"\\u{ord(char):04x}") if ord(char) < 32 or char == "\\"
+                           or ord(char) == 127 else char for char in value)
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    return "".join("\t".join(cell(record[key]) if key in record else "" for key in columns) + "\n" for record in records)
+
+
 def check_failure(report: Report, name: str, completed: subprocess.CompletedProcess, code: str) -> None:
     if completed.returncode != 1:
         report.add(name, False, f"exit {completed.returncode}, expected 1")
@@ -392,6 +404,14 @@ def run_kit(program: Program) -> Report:
                   program.run("version", "--no-such-option", "--json"), "VALIDATION_FAILED")
     check_failure(report, "jsonl on a json-envelope command fails with VALIDATION_FAILED",
                   program.run("version", "--format", "jsonl"), "VALIDATION_FAILED")
+    for long, argument in GLOBAL_OPTIONS.items():
+        words = [long, argument["choices"][0]] if argument else [long]
+        check_failure(report, f"duplicate {long} fails with VALIDATION_FAILED",
+                      program.run("version", *words, *words, *([] if long == "--json" else ["--json"])),
+                      "VALIDATION_FAILED")
+    for long in ("--format", "--color", "--progress", "--pager"):
+        check_failure(report, f"invalid {long} choice fails with VALIDATION_FAILED",
+                      program.run("version", f"{long}=invalid-choice", "--json"), "VALIDATION_FAILED")
     transactions = [command for command in commands if isinstance(command.get("effect"), dict)]
     if transactions:
         identifier = transactions[0]["id"]
@@ -420,11 +440,10 @@ def run_kit(program: Program) -> Report:
         lines = [line for line in jsonl.stdout.splitlines() if line]
         report.add("__complete --format jsonl renders one record per line",
                    jsonl.returncode == 0 and len(lines) == body["data"].get("count") and all(json.loads(line) for line in lines))
-        text_records = program.run("__complete", "--format", "text", "--non-interactive", "--", "")
-        text_lines = text_records.stdout.splitlines()
+        text_run = program.run("__complete", "--format", "text", "--non-interactive", "--", "")
         report.add("__complete --format text into a pipe renders one plain line per record, no header",
-                   text_records.returncode == 0 and len(text_lines) == body["data"].get("count"),
-                   f"{len(text_lines)} lines for count {body['data'].get('count')}: {text_records.stdout[:80]!r}")
+                   text_run.returncode == 0 and text_run.stderr == "" and text_run.stdout == text_records(body["data"]["records"]),
+                   f"stdout {text_run.stdout[:80]!r}, stderr {text_run.stderr[:80]!r}")
     return report
 
 

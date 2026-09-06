@@ -174,8 +174,11 @@ Every program accepts, on every command:
 | `--pager auto\|always\|never` | pager for the text rendering when stdout is a terminal (default `auto`) |
 | `--help` | the help of the selected command |
 
-None of these options is repeatable; an option with a value takes exactly
-the choices shown, whatever name the catalog gives its argument.
+None of these options is repeatable; a duplicate fails with
+`VALIDATION_FAILED`, even when both occurrences have the same value. An
+option with a value takes exactly the choices shown, whatever name the
+catalog gives its argument. `--flag=false` disables the flag, including
+`--non-interactive=false`; a false flag does not activate its implied behavior.
 
 Progress and details follow the example of git's progress and of `--color
 auto`. In text mode a program MAY show the progress of a long run on stderr:
@@ -207,10 +210,13 @@ never started when stdout is not a terminal, as git never does; `always`
 pages whenever stdout is a terminal, even where a product setting would
 disable it; `never` disables it. `--non-interactive` implies `--pager never`:
 a pager waits for a human, and the option promises none. The pager is the
-command named by `PAGER`; an empty `PAGER` disables it; when it is unset the
+executable and arguments named by `PAGER`, split using POSIX shell quoting
+and backslash rules, without shell expansion, pipelines or redirections.
+An empty or whitespace-only `PAGER` disables it; when it is unset the
 program runs `less` and sets `LESS=FRX` unless `LESS` is set, as git does, so
 that a short rendering passes through and colors survive. When the pager
-cannot be started, the rendering goes to stdout unchanged. The pager receives
+cannot be started, or its command cannot be parsed, the rendering goes to
+stdout unchanged. The pager receives
 the rendering that would have gone to stdout, colored as `--color` decided
 on that stdout, not on the pager's pipe; it changes neither the exit code
 nor the failure rendering, which stays on stderr. Under `--format json` or
@@ -268,11 +274,20 @@ failures. `data` is governed by the descriptor's `outputSchema`. A
 envelope, one compact record per line with `--format jsonl`, and in text one
 row per record plus, when stdout is a terminal, an optional header; there it
 MAY align columns and color, and pages as section 5 says. Into a pipe it
-renders one plain line per record: the record's scalar fields in the order
-of the descriptor's `outputSchema`, separated by tabs, a nested value as
-compact JSON, a tab or a line break inside a field escaped as `\t` and `\n`,
-so that a record is exactly one line and `wc -l`, `cut` and `grep` see the
-records and nothing else. The stable machine form is `jsonl`.
+renders one plain line per record, with fields separated by tabs. The columns
+are the union of the records' top-level member names, sorted lexicographically
+by Unicode code point; every row uses those same columns. A missing member
+is an empty field; a string is printed without JSON quotes, escaping
+backslash, tab, carriage return and newline as `\\`, `\t`, `\r` and `\n`.
+Other ASCII control characters (U+0000 to U+001F, and U+007F) use `\uXXXX`.
+Every other value, including `null`, a boolean, an array or an object, is
+compact JSON. An empty object still has a row; zero records produce no lines.
+Each row ends with a newline, with no header or terminal escape sequences.
+Column order does not depend on `outputSchema`, whose job is validation.
+Thus `wc -l`, `cut` and `grep` see records and nothing else. The stable machine
+form is `jsonl`: the columns in text can vary with the members present in a
+result. Text is not a lossless interchange format (an absent member and an
+empty string both render as an empty field).
 
 Text rendering of a failure is `PROGRAM: [CODE] message` on stderr, followed
 by `Hint: ...` when present, colored on a terminal unless `--color never`,
@@ -323,9 +338,10 @@ listed code for another meaning.
 
 `stream` commands and delegates (`external: true`) are the only exceptions
 to the envelope. They refuse rendering options, keep diagnostics on stderr,
-never inject banners, progress or JSON into their stdout, and name the
-protocol that owns their stdio through `protocol` next to `outputMode:
-"protocol-stream"`. A delegate receives every argument after its pattern
+never inject banners, progress or JSON into their stdout, and declare
+`outputMode: "protocol-stream"`. A command implementing a named protocol
+identifies it through `protocol`; a command merely relaying a child's stdio
+declares none, as section 2 says. A delegate receives every argument after its pattern
 verbatim, including `--help`, and owns its exit code.
 
 ## 10. Proof of implementation
@@ -341,7 +357,7 @@ continuous integration against its own binaries.
 
 `agent-cli/v2` is the identifier of this document. A compatible clarification
 or addition (a new optional member, a new value kind, a new invocation that
-leaves existing invocations and documents unchanged) is a new tag of this
+leaves existing invocation semantics and machine documents unchanged) is a new tag of this
 repository and keeps the identifier. Such an addition may be mandatory in the
 text of the tag that introduces it: an implementation is conformant to the
 tag it pins, and takes the addition on when it moves its pin. An agent that
@@ -349,3 +365,9 @@ reads `agent-cli/v2` therefore relies on the catalog, not on the identifier,
 to know which forms a program accepts. An incompatible change (a member
 removed, a meaning changed, a required member added to an existing document)
 changes the identifier to `agent-cli/v3` and starts a new document.
+
+These compatibility guarantees cover invocation semantics, exit codes and
+machine forms (`json`, `jsonl`, and protocol streams). Human text layout and
+terminal presentation may evolve within v2, subject to the rules of the
+pinned tag; the changelog records changes to the pipe rendering as well.
+Consumers that need stable fields use `json` or `jsonl`.
