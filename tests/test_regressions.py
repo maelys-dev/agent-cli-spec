@@ -52,8 +52,11 @@ class ValidatorRegressionTest(unittest.TestCase):
             self.assertEqual(unsupported_keywords(schema), [], name)
         self.assertEqual(unsupported_keywords({"properties": {"format": {"type": "string"}},
                                                "const": {"unknown": 1}}), [])
-        self.assertEqual(unsupported_keywords({"properties": {"x": {"format": "date"}}}),
-                         ["$.properties.x.format"])
+        self.assertEqual(unsupported_keywords({"properties": {"x": {"format": "date"}}}), [])
+        self.assertEqual(unsupported_keywords({"pattern": "^(?<major>[0-9]+)\\."}), [])
+        self.assertFalse(validate("12.", {"pattern": "^(?<major>[0-9]+)\\."}))
+        self.assertTrue(unsupported_keywords({"pattern": "^\\p{L}+$"}))
+        self.assertTrue(unsupported_keywords({"patternProperties": {"[": {}}}))
         self.assertTrue(unsupported_keywords({"$schema": "http://json-schema.org/draft-07/schema#"}))
         self.assertTrue(unsupported_keywords({"$defs": {"child": {"$id": "child.json", "type": "string"}}}))
 
@@ -96,9 +99,16 @@ class KitRegressionTest(unittest.TestCase):
         self.assertTrue(any(check["passed"] is None and "unsupported" in check["detail"] for check in report.checks))
         self.assertTrue(any("omits hidden and unavailable" in check["name"] and check["passed"] for check in report.checks))
 
+    def test_ecma_pattern_is_skipped_not_failed(self):
+        program = FixtureProgram()
+        program.fixture.CATALOG[1]["outputSchema"] = {"type": "object", "properties": {"version": {"pattern": "^\\p{L}"}}}
+        report = run_kit(program)
+        self.assertTrue(report.passed, [check for check in report.checks if check["passed"] is False])
+        self.assertTrue(any(check["passed"] is None and "regex not supported" in check["detail"] for check in report.checks))
+
     def test_malformed_schemas_are_reported(self):
         for schema in ({"properties": []}, {"$ref": "#/missing"}, {"$ref": "#"},
-                       {"type": "unknown"}, {"patternProperties": {"[": {}}}, {"$ref": "#/allOf/1", "allOf": [{}]}):
+                       {"type": "unknown"}, {"$ref": "#/allOf/1", "allOf": [{}]}):
             program = FixtureProgram()
             program.fixture.CATALOG[1]["outputSchema"] = schema
             report = run_kit(program)
@@ -200,6 +210,15 @@ class ProcessTest(unittest.TestCase):
         report = json.loads(stdout.getvalue())
         self.assertFalse(report["passed"])
         self.assertTrue(any("timed out" in check["detail"] for check in report["checks"]))
+
+    @unittest.skipUnless(os.name == "posix", "process groups are POSIX")
+    def test_timeout_does_not_wait_for_a_grandchild_in_another_session(self):
+        child = "import time; time.sleep(6)"
+        parent = f"import subprocess,sys,time; subprocess.Popen([sys.executable,'-c',{child!r}], start_new_session=True); time.sleep(10)"
+        program = Program([sys.executable, "-c", parent], timeout=0.3)
+        started = time.monotonic()
+        self.assertEqual(program.run().returncode, -1)
+        self.assertLess(time.monotonic() - started, 3)
 
     @unittest.skipUnless(os.name == "posix", "process groups are POSIX")
     def test_timeout_kills_children_holding_the_pipes(self):

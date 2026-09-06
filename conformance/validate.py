@@ -32,7 +32,14 @@ ASSERTIONS = {"type", "const", "enum", "required", "properties", "additionalProp
               "items", "minItems", "maxItems", "minLength", "maxLength", "minimum", "maximum", "pattern",
               "oneOf", "anyOf", "allOf", "not", "if", "then", "else", "$ref"}
 ANNOTATIONS = {"$schema", "$id", "$comment", "$defs", "definitions", "title", "description", "default",
-               "examples", "deprecated", "readOnly", "writeOnly"}
+               "examples", "deprecated", "readOnly", "writeOnly", "format"}
+
+
+def compile_pattern(pattern: str) -> "re.Pattern[str]":
+    """A schema pattern, in the common ECMA-262 / POSIX ERE subset of spec section 3, compiled with Python's
+    engine. The one ECMA spelling Python lacks, the named group `(?<name>`, is translated; anything else
+    Python refuses (`\\p{L}`, ...) raises re.error and the schema is reported as unsupported, never as failed."""
+    return re.compile(re.sub(r"\(\?<(?![=!])", "(?P<", pattern))
 
 
 def json_equal(left: Any, right: Any) -> bool:
@@ -70,6 +77,13 @@ def unsupported_keywords(schema: Any, path: str = "$") -> list[str]:
     if not isinstance(schema, dict):
         raise ValueError(f"{path}: a schema must be an object or boolean")
     unknown = [f"{path}.{key}" for key in schema if key not in ASSERTIONS | ANNOTATIONS]
+    patterns = ([(f"{path}.pattern", schema["pattern"])] if isinstance(schema.get("pattern"), str) else []) \
+        + [(f"{path}.patternProperties[{name!r}]", name) for name in schema.get("patternProperties", {})]
+    for where, pattern in patterns:
+        try:
+            compile_pattern(pattern)
+        except re.error as error:
+            unknown.append(f"{where}: regex not supported by this kit ({error})")
     if "$schema" in schema and schema["$schema"].rstrip("#") != "https://json-schema.org/draft/2020-12/schema":
         unknown.append(f"{path}.$schema: unsupported dialect {schema['$schema']}")
     if "$id" in schema and path != "$":
@@ -115,7 +129,7 @@ def validate(value: Any, schema: dict | bool, root: dict | None = None, path: st
         issues.append(Issue(path, f"expected {schema['const']!r}, got {value!r}"))
     if "enum" in schema and not any(json_equal(value, member) for member in schema["enum"]):
         issues.append(Issue(path, f"expected one of {schema['enum']}, got {value!r}"))
-    if isinstance(value, str) and "pattern" in schema and not re.search(schema["pattern"], value):
+    if isinstance(value, str) and "pattern" in schema and not compile_pattern(schema["pattern"]).search(value):
         issues.append(Issue(path, f"{value!r} does not match {schema['pattern']}"))
     if isinstance(value, str):
         if "minLength" in schema and len(value) < schema["minLength"]:
@@ -138,7 +152,7 @@ def validate(value: Any, schema: dict | bool, root: dict | None = None, path: st
             child = f"{path}.{name}" if path else name
             if name in properties:
                 issues.extend(validate(member, properties[name], root, child))
-            matched = [pattern for pattern in patterns if re.search(pattern, name)]
+            matched = [pattern for pattern in patterns if compile_pattern(pattern).search(name)]
             if matched:
                 for pattern in matched:
                     issues.extend(validate(member, patterns[pattern], root, child))

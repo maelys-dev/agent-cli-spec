@@ -72,7 +72,13 @@ class Program:
                         pass
                 else:
                     process.kill()
-                process.communicate()
+                try:
+                    process.communicate(timeout=self.timeout)
+                except subprocess.TimeoutExpired:
+                    # a grandchild that left the session may hold the pipes: stop reading, reap the child
+                    process.stdout.close()
+                    process.stderr.close()
+                    process.wait()
                 message = f"{shlex.join(arguments)}: timed out after {self.timeout:g}s"
                 self.failures.append(message)
                 return result(-1, "", message)
@@ -201,7 +207,9 @@ def text_records(records: list[dict]) -> str:
 
 
 def check_pager_in_pipe(report: Report, program: Program) -> None:
-    """An identity pager alone cannot prove that no process was started."""
+    """An identity pager alone cannot prove that no process was started.
+
+    The sentinel is named by PAGER; a program that hard-codes its pager and ignores PAGER escapes it."""
     with tempfile.TemporaryDirectory(prefix="agent-cli-pager-") as directory:
         marker = pathlib.Path(directory) / "started"
         script = pathlib.Path(directory) / "pager.py"
@@ -418,7 +426,7 @@ def _run_kit(program: Program, report: Report) -> Report:
         if body is not None:
             data = body["data"]
             report.add(f"{identifier}: describe {identifier} returns the catalog's descriptor",
-                       data.get("kind") == "command" and data.get("commands") == [command]
+                       data.get("kind") == "command" and json_equal(data.get("commands"), [command])
                        and not any(key in data for key in ("globalOptions", "invariants", "output")),
                        "kind, descriptor or inventory members differ")
     summary = program.run("describe", "--summary", "--format", "json", "--compact", "--non-interactive")
@@ -658,11 +666,11 @@ def main(argv: list[str]) -> int:
     passed = sum(check["passed"] is True for check in report.checks)
     failed = sum(check["passed"] is False for check in report.checks)
     skipped = sum(check["passed"] is None for check in report.checks)
-    summary = {"program": command, "contract": "agent-cli/v2", "passed": report.passed,
+    summary = {"reportVersion": 1, "program": command, "contract": "agent-cli/v2", "passed": report.passed,
                "checks": report.checks, "counts": {"passed": passed, "failed": failed, "skipped": skipped},
-               "coverage": {"catalog": "all descriptors", "invocations": "built-ins and safe hidden-option probes",
-                            "notChecked": ["product business behavior and writes", "protocol streams and delegates",
-                                           "terminal rendering (tested separately by implementations)"]}}
+               "scope": {"catalog": "all descriptors", "invocations": "built-ins and safe hidden-option probes",
+                         "notChecked": ["product business behavior and writes", "protocol streams and delegates",
+                                        "terminal rendering (tested separately by implementations)"]}}
     if report_path:
         try:
             report_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")

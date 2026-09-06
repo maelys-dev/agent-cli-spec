@@ -54,10 +54,13 @@
   values include `1.0`, and string lengths are enforced. Conditional schemas
   distinguish catalogs, summaries and single descriptors, require complete
   output contracts and unavailable reasons, and preserve `x-` transaction
-  extensions. Fixed API and failure codes now match the normative text.
+  extensions. `cliApi` is fixed to 1, a failure exit code is at least 1, a
+  delegate is a protocol stream, and a schema whose regex this kit cannot
+  compile is skipped, never failed.
   Successful responses are checked against declared output schemas; schemas
-  outside the supported subset are explicitly skipped. Reports describe
-  their coverage and count skipped checks separately from failures.
+  outside the supported subset are explicitly skipped. Reports carry
+  `reportVersion` 1 and their scope, and count skipped checks separately
+  from failures; the redundant "stable codes" check is gone.
 - Invalid response structures, malformed JSONL, invalid UTF-8 and timed-out
   probes produce failures instead of tracebacks or indefinite waits. The
   per-invocation timeout is configurable with `--timeout` (10 seconds by

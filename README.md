@@ -46,12 +46,16 @@ Malformed JSON, invalid UTF-8 and timeouts are failures in the report.
 The report covers catalog structure, built-ins and safe hidden-option
 probes. Responses are checked against their declared `outputSchema` when
 the kit supports its keywords and references (a subset of Draft 2020-12,
-with local JSON Pointers and no embedded schema resources). Otherwise the report names
-the unsupported schema as `SKIP` (`passed: null` in JSON); `counts` separates
-passed, failed and skipped checks. A passing report means the executed
-checks passed, not that the entire specification has been proved. The
-`coverage` member names the scope and the remaining implementation tests:
-business behavior, writes, protocol streams, delegates and terminal rendering.
+with local JSON Pointers and no embedded schema resources) and can compile
+its patterns: they are evaluated with Python's `re`, named groups `(?<n>`
+translated, `\p{...}` classes not supported; the common ECMA-262 / POSIX ERE
+subset of the specification's section 3 is always supported. Otherwise the
+report names the unsupported schema as `SKIP` (`passed: null` in JSON);
+`counts` separates passed, failed and skipped checks, and `reportVersion`
+is `1`. A passing report means the executed checks passed, not that the
+entire specification has been proved. The `scope` member names what the
+kit covers and the remaining implementation tests: business behavior,
+writes, protocol streams, delegates and terminal rendering.
 The fixture's own terminal behavior is exercised by the repository's tests.
 
 An implementation runs it in its own continuous integration on its own
