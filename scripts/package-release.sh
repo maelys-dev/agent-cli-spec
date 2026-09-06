@@ -16,7 +16,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/agent-cli-spec-package.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 stage="$work/agent-cli-spec-$version"
 mkdir -p "$stage"
-cp -R spec schemas conformance examples VERSION CHANGELOG.md LICENSE README.md "$stage/"
+cp -R spec schemas conformance examples VERSION CHANGELOG.md LICENSE LICENSE-SPEC README.md "$stage/"
 rm -rf "$stage/conformance/__pycache__"
 mkdir -p dist
 name="agent-cli-spec-$version-$target.tar.gz"
