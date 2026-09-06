@@ -65,7 +65,7 @@ CATALOG = [
             [option("--summary", "Without schemas."),
              option("--prefix", "Select a command namespace.",
                     {"name": "PREFIX", "type": "string",
-                     "pattern": "^[a-z](?:[a-z0-9.-]*[a-z0-9-])?$"},
+                     "pattern": "^[a-z]([a-z0-9.-]*[a-z0-9-])?$"},
                     requires=["--summary"], conflicts=["COMMAND_ID"]),
              option("--trace", "Trace the catalog lookup.", hidden=True)],
             [{"kind": "requires", "options": ["--prefix", "--summary"]}]),
@@ -202,7 +202,7 @@ def main(argv):
             return fail("describe", "VALIDATION_FAILED", "--prefix conflicts with COMMAND_ID.", fmt, compact)
         if not isinstance(prefix, str) or not prefix:
             return fail("describe", "VALIDATION_FAILED", "--prefix requires PREFIX.", fmt, compact)
-        if re.fullmatch(r"[a-z](?:[a-z0-9.-]*[a-z0-9-])?", prefix) is None:
+        if re.fullmatch(r"[a-z]([a-z0-9.-]*[a-z0-9-])?", prefix) is None:
             return fail("describe", "VALIDATION_FAILED", "--prefix is not a valid command prefix.", fmt, compact)
     if fmt == "jsonl" and selected["outputMode"] != "json-records":
         return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
