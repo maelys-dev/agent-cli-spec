@@ -106,8 +106,30 @@ def fail(command_id, code, message, fmt, compact):
     return 1
 
 
+def record_text(records):
+    columns = sorted(set().union(*(record.keys() for record in records)))
+    rows = []
+    for record in records:
+        fields = []
+        for key in columns:
+            if key not in record:
+                fields.append("")
+            elif isinstance(record[key], str):
+                value = record[key].replace("\\", "\\\\").replace("\t", "\\t").replace("\r", "\\r").replace("\n", "\\n")
+                value = "".join(f"\\u{ord(char):04x}" if ord(char) < 32 or ord(char) == 127 else char for char in value)
+                fields.append(value)
+            else:
+                fields.append(json.dumps(record[key], ensure_ascii=False, separators=(",", ":")))
+        rows.append("\t".join(fields) + "\n")
+    return "".join(rows)
+
+
 def main(argv):
     fmt, compact, words, options, passthrough = "text", False, [], {}, None
+    declarations = {item["long"]: item for item in GLOBAL_OPTIONS}
+    declarations.update({item["long"]: item for command in CATALOG for item in command["input"]["options"]})
+    declarations["--version"] = option("--version", "Version.")
+    duplicates = []
     index = 0
     while index < len(argv):
         word = argv[index]
@@ -115,22 +137,26 @@ def main(argv):
             passthrough = argv[index + 1:]
             break
         if word.startswith("--"):
-            name, _, value = word.partition("=")
-            if name in ("--format", "--color", "--prefix", "--progress", "--pager") and not value:
+            name, equals, value = word.partition("=")
+            if declarations.get(name, {}).get("argument") and not equals:
                 index += 1
                 value = argv[index] if index < len(argv) else ""
-            options[name] = value or True
+            elif not equals:
+                value = True
+            if name in options:
+                duplicates.append(name)
+            options[name] = value
         else:
             words.append(word)
         index += 1
-    if "--json" in options or options.get("--format") == "json":
+    if options.get("--json") in (True, "true") or options.get("--format") == "json":
         fmt = "json"
     if options.get("--format") == "jsonl":
         fmt = "jsonl"
-    compact = "--compact" in options or options.get("--pretty") == "false"
-    if "--help" in options and not words:
+    compact = options.get("--compact") in (True, "true") or options.get("--pretty") == "false"
+    if options.get("--help") in (True, "true") and not words:
         words = ["help"]
-    if "--version" in options and not words:
+    if options.get("--version") in (True, "true") and not words:
         words = ["version"]
     by_id = {item["id"]: item for item in CATALOG}
     selected = None
@@ -142,13 +168,23 @@ def main(argv):
     operands = words[len(selected["pattern"]):] + (passthrough or [])
     known = {item["long"] for item in selected["input"]["options"]} | {item["long"] for item in GLOBAL_OPTIONS}
     if isinstance(selected["effect"], dict) and ("--dry-run" in options or "--plan" in options):
-        return fail(selected["id"], "VALIDATION_FAILED", "--dry-run is not supported: the command plans by default.", fmt, compact)
+        return fail(selected["id"], "VALIDATION_FAILED", "The command plans by default; use --apply to apply.", fmt, compact)
     for name in options:
         if name not in known and name != "--version":
             return fail(selected["id"], "VALIDATION_FAILED", f"Option {name} is not supported by '{selected['id']}'.", fmt, compact)
+    if duplicates:
+        return fail(selected["id"], "VALIDATION_FAILED", f"Duplicate option {duplicates[0]}.", fmt, compact)
+    for name, value in options.items():
+        argument = declarations[name].get("argument")
+        if argument is None:
+            if value is not True and value not in ("true", "false"):
+                return fail(selected["id"], "VALIDATION_FAILED", f"{name} takes true or false.", fmt, compact)
+            options[name] = value is True or value == "true"
+        elif argument.get("type") == "choice" and value not in argument["choices"]:
+            return fail(selected["id"], "VALIDATION_FAILED", f"Invalid choice for {name}.", fmt, compact)
     if selected["id"] == "describe" and "--prefix" in options:
         prefix = options["--prefix"]
-        if "--summary" not in options:
+        if not options.get("--summary"):
             return fail("describe", "VALIDATION_FAILED", "--prefix requires --summary.", fmt, compact)
         if operands:
             return fail("describe", "VALIDATION_FAILED", "--prefix conflicts with COMMAND_ID.", fmt, compact)
@@ -159,7 +195,7 @@ def main(argv):
     if fmt == "jsonl" and selected["outputMode"] != "json-records":
         return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
     identifier = selected["id"]
-    verbose = "--verbose" in options and options["--verbose"] != "false"
+    verbose = options.get("--verbose", False)
     progress = options.get("--progress", "auto")
     if progress not in ("auto", "always", "never"):
         return fail(identifier, "VALIDATION_FAILED", "--progress takes auto, always or never.", fmt, compact)
@@ -188,7 +224,7 @@ def main(argv):
             if operands[0] not in by_id:
                 return fail("describe", "INVALID_COMMAND", f"Unknown command identifier {operands[0]!r}.", fmt, compact)
             data["kind"], data["commands"] = "command", [by_id[operands[0]]]
-        elif "--summary" in options:
+        elif options.get("--summary"):
             selected_commands = CATALOG
             if "--prefix" in options:
                 prefix = options["--prefix"]
@@ -212,19 +248,23 @@ def main(argv):
         current = operands[-1] if operands else ""
         given = operands[:-1]
         target = next((item for item in CATALOG if given and given[:len(item["pattern"])] == item["pattern"]), None)
-        if target is not None:
+        if target is not None and target["available"]:
             longs = {item["long"] for item in target["input"]["options"] if offered(item)}
             longs |= {item["long"] for item in GLOBAL_OPTIONS}
             matching = sorted(long for long in longs - set(given) if long.startswith(current))
+        elif target is not None:
+            matching = []
         else:
-            matching = sorted({item["pattern"][0] for item in CATALOG if not item["hidden"] and item["pattern"][0].startswith(current)})
+            matching = sorted({item["pattern"][0] for item in CATALOG
+                               if not item["hidden"] and item["available"] and item["pattern"][0].startswith(current)})
         data = {"count": len(matching), "records": [{"word": word} for word in matching]}
         header = "WORD\n" if sys.stdout.isatty() or BREAK == "header-in-pipe" else ""
-        text = header + "".join(word.replace("\t", "\\t").replace("\n", "\\n") + "\n" for word in matching)
+        text = header + record_text(data["records"])
     else:
-        data = {"mode": "apply" if "--apply" in options else "plan", "changed": False}
+        data = {"mode": "apply" if options.get("--apply") else "plan", "changed": False}
         text = f"note: {data['mode']}\n"
-    paging = fmt == "text" and pager != "never" and "--non-interactive" not in options and sys.stdout.isatty() \
+    paging = fmt == "text" and pager != "never" and not options.get("--non-interactive", False) \
+        and sys.stdout.isatty() \
         and os.environ.get("PAGER", "less") != ""
     if paging:
         env = dict(os.environ)
@@ -232,8 +272,12 @@ def main(argv):
             env.setdefault("LESS", "FRX")
         sys.stdout.flush()
         try:
-            subprocess.run(shlex.split(env.get("PAGER", "less")), input=text, text=True, check=False, env=env)
-        except OSError:
+            pager_command = shlex.split(env.get("PAGER", "less"))
+            if pager_command:
+                subprocess.run(pager_command, input=text, text=True, check=False, env=env)
+            else:
+                paging = False
+        except (OSError, ValueError):
             paging = False
     if fmt == "text":
         if not paging:

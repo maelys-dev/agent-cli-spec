@@ -2,59 +2,49 @@
 
 ## 2.3.0 — 2026-09-05
 
-- Add `--progress auto|always|never` and `--verbose` to the trunk of global
-  options, on the example of git's progress and of `--color auto`. In text mode a program MAY show the progress of
-  a long run on stderr, by default only when stderr is a terminal, so that a
-  human sees it and a pipe or a log does not; `always` forces it, `never`
-  suppresses it; progress is transient and never on stdout. `--verbose` adds
-  the details of the run on stderr, one line each, default silent. Under
-  `--format json` or `jsonl` both are accepted and write nothing, so an
-  agent's envelope stays alone on its stream; a program with nothing to show
-  accepts both and produces nothing more. Decision: several products need a
-  progress display for humans during long network work, a human never types
-  an option before every long call, so progress follows the terminal as git
-  and `--color auto` do; and one spelling across products is what the
-  contract exists for, as for `--apply`. The alternative, diagnostics on
-  stderr in JSON mode too, was rejected: a failure envelope lives on stderr,
-  so any diagnostic there would break the parsing of stderr on failure
-  unless a framing rule changed every consumer; an agent that wants machine
-  progress has `jsonl` records. A `protocol-stream` command accepts both
-  options and keeps its diagnostics on stderr; a delegate receives them
-  verbatim. An agent checks `globalOptions` before passing them. A program
-  conformant to 2.2.1 moves to 2.3.0 by declaring both in `globalOptions`
-  and accepting them. None of the trunk options is repeatable, and their
-  shape is the value type and the choices, whatever the argument's name. The
-  kit checks the declarations and their shape, the silence of both options
-  in JSON and jsonl modes on success and on failure, the unchanged stdout in
-  text mode, `--progress never` and `--verbose=false`, and that no command
-  borrows a trunk spelling with another shape.
-- Add `--pager auto|always|never` to the trunk, on git's example too: in
-  text mode a program MAY send its rendering through the pager named by
-  `PAGER` (`less` with `LESS=FRX` when unset, disabled when empty) when
-  stdout is a terminal, so a human browses a long rendering as `git log` is
-  browsed; a pager is never started when stdout is not a terminal, as git
-  never does; `always` pages whenever stdout is a terminal even where a
-  product setting would disable it, `never` disables it, and
-  `--non-interactive` implies `never`, since a pager waits for a human. When
-  the pager cannot be started the rendering goes to stdout unchanged.
-  Nothing is paged under `--format json` or `jsonl`; `--pager` is a
-  rendering option, refused by a `protocol-stream` command; a program without
-  a pager accepts the option and writes to stdout as before. The kit checks
-  the declaration and shape, the untouched envelope in JSON mode and the
-  untouched stdout with `never` and with `always` into a pipe; paging itself
-  needs a terminal the kit does not have.
-- Section 7, text rendering of a `json-records` command: one row per record
-  plus, on a terminal, an optional header; there it MAY align columns and
-  color, and pages. Into a pipe it renders one plain line per record, the
-  scalar fields in the order of `outputSchema` separated by tabs, nested
-  values as compact JSON, a tab or line break inside a field escaped as `\t`
-  and `\n`, so `wc -l`, `cut` and `grep` see the records and nothing else.
-  The former "one human line per record" forbade any table for humans while
-  the stable machine form is `jsonl`; `gh` and `git` show the way, the
-  terminal decides. This also tightens the pipe form: an implementation that
-  rendered a header or space-aligned columns into a pipe under 2.2.1 changes
-  its text rendering when it moves its pin. The kit checks the pipe form: as
-  many lines as `count`.
+- Add `--progress auto|always|never` and `--verbose` to the trunk. Progress
+  follows stderr's terminal status by default; verbose details are explicit.
+  Both stay on stderr in text mode, never resemble failure renderings, and
+  remain silent in JSON and JSONL. A program with nothing to show accepts
+  them without producing diagnostics. Protocol streams keep diagnostics on
+  stderr and delegates receive the options verbatim. An agent discovers
+  support in `globalOptions` before passing them. This gives products one
+  spelling for progress and details while preserving parseable machine
+  streams; adding diagnostics beside JSON failure envelopes was rejected.
+- Add `--pager auto|always|never`. Text may be paged when stdout is a
+  terminal; a pager never starts in a pipe, in JSON/JSONL, or under an active
+  `--non-interactive`. `PAGER` is an executable with arguments using POSIX
+  quoting, without shell expansion; empty or whitespace-only disables it.
+  Unset runs `less` with `LESS=FRX` unless `LESS` is already set. An invalid
+  pager command or a binary that cannot start falls back to stdout. Color
+  follows the original stdout. A protocol-stream command refuses this
+  rendering option; a delegate receives it verbatim. Programs without a
+  pager accept the option and render directly.
+- None of the trunk options is repeatable. Duplicates fail before execution
+  with `VALIDATION_FAILED`, even with the same value, as section 8 already
+  classed duplication; flags with `=false` do not activate their implied
+  behavior. The kit checks the declarations, the duplicate and invalid-value
+  refusals, the unchanged stdout and the diagnostic silence.
+- Product transport options may be declared in `globalOptions` or repeated
+  in `input.options` wherever accepted, with one spelling and shape.
+  Implementations should offer the global declaration form; options repeated
+  only at command level still require product tests of their common
+  transport semantics. The kit checks trunk collisions.
+- Clarify text records: a terminal may display aligned columns and a header.
+  A pipe has one plain, tab-separated line per record. Columns are the union
+  of member names in the result, sorted by Unicode code point and shared by
+  every row. Missing fields are empty; strings escape backslashes, tabs,
+  line breaks and ASCII controls; other values use compact JSON. This order
+  does not depend on JSON Schema property ordering. Text layout can evolve
+  within v2; invocation semantics and machine forms remain the compatibility
+  boundary. Products adopting this tag may need to change their pipe text;
+  consumers requiring stable fields continue to use JSON or JSONL. The kit
+  checks the pipe form against the records of the JSON envelope.
+
+Migration: an implementation pinned to 2.2.1 declares and accepts the three
+new options, implements their documented behavior where supported, and
+adapts its text records when necessary. No new effect or value kind is added.
+The committed maelys-cli example still represents its own 2.2.1 pin.
 
 ## 2.2.1 — 2026-09-05
 
