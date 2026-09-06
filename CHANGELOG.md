@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.3.0 — 2026-09-05
+## 2.3.0 — 2026-09-06
 
 - Add `--progress auto|always|never` and `--verbose` to the trunk. Progress
   follows stderr's terminal status by default; verbose details are explicit.
