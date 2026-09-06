@@ -9,7 +9,7 @@
     "program": {"type": "string", "minLength": 1},
     "version": {"type": "string", "minLength": 1},
     "contract": {"const": "agent-cli/v2"},
-    "cliApi": {"type": "integer", "minimum": 1},
+    "cliApi": {"const": 1},
     "framework": {"type": "string"}
   },
   "patternProperties": {"^x-": {}},

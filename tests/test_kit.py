@@ -13,6 +13,8 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "conformance"))
 from validate import validate  # noqa: E402
+from run import run_kit  # noqa: E402
+from support import FixtureProgram  # noqa: E402
 
 KIT = ROOT / "conformance" / "run.py"
 FIXTURE = ROOT / "tests" / "fixtures" / "conformant.py"
@@ -106,18 +108,27 @@ class KitTest(unittest.TestCase):
         self.assertEqual(body["counts"]["failed"], 0)
 
     def test_broken_fixtures_fail(self) -> None:
-        for defect, expected in (("exit-codes", "exit codes are the contract's"),
+        for defect, expected in (("exit-codes", "matches schemas/describe.json"),
                                  ("extra-member", "matches schemas/describe.json"),
                                  ("code-drift", "INVALID_COMMAND"),
                                  ("hidden-leak", "hidden option"),
                                  ("text-on-stderr", "text success"),
                                  ("verbose-json", "--verbose writes nothing"),
                                  ("progress-json", "--progress always writes nothing"),
-                                 ("header-in-pipe", "one plain line per record")):
+                                 ("header-in-pipe", "one plain line per record"),
+                                 ("envelope-types", "describe envelope"),
+                                 ("empty-command", "describe envelope"),
+                                 ("missing-output-schema", "matches schemas/describe.json"),
+                                 ("output-schema", "declared outputSchema"),
+                                 ("malformed-catalog", "matches schemas/describe.json"),
+                                 ("jsonl-noise", "preserves records"),
+                                 ("malformed-jsonl", "records"),
+                                 ("text-garbage", "one plain line per record"),
+                                 ("pager-in-pipe", "never starts a pager")):
             with self.subTest(defect=defect):
-                completed = kit(sys.executable, str(FIXTURE), "--json", env={"CONFORMANT_BREAK": defect})
-                self.assertEqual(completed.returncode, 1)
-                failed = [check["name"] for check in json.loads(completed.stdout)["checks"] if not check["passed"]]
+                report = run_kit(FixtureProgram(defect))
+                self.assertFalse(report.passed)
+                failed = [check["name"] for check in report.checks if check["passed"] is False]
                 self.assertTrue(any(expected in name for name in failed), failed)
 
     def test_unrunnable_program(self) -> None:
