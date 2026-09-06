@@ -30,6 +30,14 @@
   Implementations should offer the global declaration form; options repeated
   only at command level still require product tests of their common
   transport semantics. The kit checks trunk collisions.
+- Section 1 says which form of `describe` carries which members: the catalog
+  carries `globalOptions`, `invariants` and `output` and full descriptors,
+  the command form full descriptors, the summary neither. Section 3 gives
+  `pattern` its status and its dialect: the value MUST match it, the
+  implementation enforces it by regex engine or by code, and it is written in
+  the common subset of ECMA-262 and POSIX ERE so that an agent, the kit and
+  an implementation read the same motif. Section 7 defines `count` as the
+  number of `records` in the envelope.
 - Clarify text records: a terminal may display aligned columns and a header.
   A pipe has one plain, tab-separated line per record. Columns are the union
   of member names in the result, sorted by Unicode code point and shared by

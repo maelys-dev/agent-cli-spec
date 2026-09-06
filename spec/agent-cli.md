@@ -45,7 +45,11 @@ PROGRAM describe COMMAND_ID --format json       # one descriptor
 
 `describe --summary` omits `outputSchema` and `exitCodes` from each
 descriptor. `describe COMMAND_ID` returns exactly the catalog's descriptor of
-that identifier, and fails with `INVALID_COMMAND` for an unknown one.
+that identifier, and fails with `INVALID_COMMAND` for an unknown one. The
+catalog form carries `globalOptions`, `invariants` and `output`, and every
+descriptor of the catalog and of the command form carries `outputSchema` and
+`exitCodes`; the summary and command forms MUST NOT carry the three catalog
+members.
 
 `describe --summary --prefix PREFIX` is the token-efficient discovery form
 for a command namespace. `PREFIX` has the command-identifier grammar of
@@ -137,6 +141,17 @@ committed by products do not change.
 (`ALGORITHM:HEX`, `algorithms` declared), `sha256`. Ranges and choices are
 declared in the catalog and enforced by the parser before the command runs.
 An option value that starts with `--` is still a value.
+
+`pattern`, on a `string` or `path` value, is the regular expression the value
+MUST match; the implementation enforces it by the means of its choice, a
+regex engine or code, and refuses a mismatch with `VALIDATION_FAILED`. It is
+written in the common subset of ECMA-262 and POSIX ERE: literals, ASCII
+character classes and ranges, `.`, the quantifiers `*`, `+`, `?` and `{m,n}`,
+alternation, unnamed groups, the anchors `^` and `$`; no named group, no
+`\p{...}` class, no lookaround, no back-reference. Written so, the same motif
+reads the same for an agent, which MAY check a value against it before
+invoking, for the conformance kit, and for an implementation that checks it
+by hand.
 
 ## 4. Effects
 
@@ -271,7 +286,9 @@ language; `error.hint` gives the next safe action and SHOULD be present;
 `error.issues` MAY list `{"code", "path", "message"}` entries for schema
 failures. `data` is governed by the descriptor's `outputSchema`. A
 `json-records` command renders `{"count": N, "records": [...]}` in the
-envelope, one compact record per line with `--format jsonl`, and in text one
+envelope, `count` being the number of `records` in that envelope (a total
+beyond it is an `x-` member), one compact record per line with `--format
+jsonl`, and in text one
 row per record plus, when stdout is a terminal, an optional header; there it
 MAY align columns and color, and pages as section 5 says. Into a pipe it
 renders one plain line per record, with fields separated by tabs. The columns
