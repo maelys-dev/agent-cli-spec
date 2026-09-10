@@ -1,6 +1,6 @@
 name: release
 
-# Managed by maelys-release v0.14.2 (0.14.2). Regenerate with
+# Managed by maelys-release untagged (0.24.0). Regenerate with
 # 'maelys-release adopt' of maelys-release; do not edit by hand.
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing signed tag whose Homebrew publication is replayed
+        description: Existing signed tag whose release and Homebrew publication are replayed
         required: true
         type: string
 
@@ -19,11 +19,11 @@ permissions:
 
 jobs:
   release:
-    if: github.event_name == 'push'
-    uses: maelys-dev/maelys-release/.github/workflows/release.yml@1749a35778ed441a7f2b53cc2de0dbc51fb9708c # v0.14.2
+    uses: maelys-dev/maelys-release/.github/workflows/release.yml@d71cb5c0ccc95e0fd253bbe4da0c612806a4a824 # untagged
     permissions:
       contents: write
       id-token: write
       attestations: write
     with:
       product: agent-cli-spec
+      tag: ${{ inputs.tag || github.ref_name }}
