@@ -36,6 +36,7 @@ GLOBAL_OPTIONS = {
     "--json": None, "--compact": None, "--pretty": None, "--non-interactive": None, "--verbose": None,
     "--progress": {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
     "--pager": {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
+    "--field": {"name": "NAME", "type": "string"},
     "--color": {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
     "--help": None,
 }
@@ -194,16 +195,67 @@ def check_jsonl(report: Report, name: str, completed: subprocess.CompletedProces
                f"exit {completed.returncode}, stdout {completed.stdout[:80]!r}, stderr {completed.stderr[:80]!r}")
 
 
+def cell(value) -> str:
+    """One field of the section 7 pipe form: a string unquoted and escaped, anything else compact JSON."""
+    if isinstance(value, str):
+        escapes = {"\\": "\\\\", "\t": "\\t", "\r": "\\r", "\n": "\\n"}
+        return "".join(escapes.get(char, f"\\u{ord(char):04x}") if ord(char) < 32 or char == "\\"
+                       or ord(char) == 127 else char for char in value)
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+
+
 def text_records(records: list[dict]) -> str:
     """The section 7 pipe form; column order never depends on schema serialization."""
     columns = sorted({key for record in records for key in record})
-    def cell(value):
-        if isinstance(value, str):
-            escapes = {"\\": "\\\\", "\t": "\\t", "\r": "\\r", "\n": "\\n"}
-            return "".join(escapes.get(char, f"\\u{ord(char):04x}") if ord(char) < 32 or char == "\\"
-                           or ord(char) == 127 else char for char in value)
-        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     return "".join("\t".join(cell(record[key]) if key in record else "" for key in columns) + "\n" for record in records)
+
+
+def field_text(value) -> str:
+    """Section 5: the pipe rendering of one member of data, whatever its shape."""
+    if isinstance(value, list):
+        if value and all(isinstance(item, dict) for item in value):
+            return text_records(value)
+        return "".join(cell(item) + "\n" for item in value)
+    if isinstance(value, dict):
+        return text_records([value])
+    return cell(value) + "\n"
+
+
+def field_jsonl(value) -> str:
+    """Section 5: an array gives one compact JSON value per line, any other member exactly one line."""
+    items = value if isinstance(value, list) else [value]
+    return "".join(json.dumps(item, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n" for item in items)
+
+
+def check_field(report: Report, program: Program, catalog: dict) -> None:
+    """--field renders one member of data, and refuses what the contract refuses."""
+    shapes = {}
+    for name in sorted(catalog):
+        value = catalog[name]
+        if isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
+            shapes.setdefault("array of objects", name)
+        elif isinstance(value, list):
+            shapes.setdefault("array", name)
+        elif isinstance(value, dict):
+            shapes.setdefault("object", name)
+        else:
+            shapes.setdefault("scalar", name)
+    for shape, name in shapes.items():
+        text = program.run("describe", "--field", name, "--format", "text", "--non-interactive")
+        report.add(f"--field {name} renders the {shape} member by the section 7 rules",
+                   text.returncode == 0 and text.stderr == "" and text.stdout == field_text(catalog[name]),
+                   f"exit {text.returncode}, stdout {text.stdout[:80]!r}, stderr {text.stderr[:80]!r}")
+        lines = program.run("describe", "--field", name, "--format", "jsonl", "--non-interactive")
+        report.add(f"--field {name} in jsonl gives one compact value per line",
+                   lines.returncode == 0 and lines.stderr == "" and lines.stdout == field_jsonl(catalog[name]),
+                   f"exit {lines.returncode}, stdout {lines.stdout[:80]!r}, stderr {lines.stderr[:80]!r}")
+    some = next(iter(shapes.values()), "kind")
+    check_failure(report, "--field with --format json fails with VALIDATION_FAILED",
+                  program.run("describe", "--field", some, "--json"), "VALIDATION_FAILED")
+    # the json refusal is an option conflict and wins over any check inside the command, so jsonl carries this one
+    check_failure(report, "--field of a member data does not carry fails with VALIDATION_FAILED",
+                  program.run("describe", "--field", "no-such-member", "--format", "jsonl"),
+                  "VALIDATION_FAILED")
 
 
 def check_pager_in_pipe(report: Report, program: Program) -> None:
@@ -314,7 +366,7 @@ def trunk_shape(item: dict, expected: dict | None) -> bool:
     if expected is None:
         return argument is None
     return isinstance(argument, dict) and argument.get("type") == expected["type"] \
-        and set(argument.get("choices", [])) == set(expected["choices"])
+        and set(argument.get("choices", [])) == set(expected.get("choices", []))
 
 
 def option_shape(option: dict) -> dict:
@@ -558,6 +610,7 @@ def _run_kit(program: Program, report: Report) -> Report:
                    and pager_never.stderr == "",
                    f"exit {pager_never.returncode}, stdout {pager_never.stdout[:60]!r}")
         check_pager_in_pipe(report, program)
+        check_field(report, program, catalog)
         verbose_false = program.run("version", "--verbose=false", "--format", "text", "--non-interactive")
         report.add("--verbose=false is accepted and silent",
                    verbose_false.returncode == 0 and verbose_false.stdout == plain_text.stdout
@@ -584,7 +637,7 @@ def _run_kit(program: Program, report: Report) -> Report:
     check_failure(report, "jsonl on a json-envelope command fails with VALIDATION_FAILED",
                   program.run("version", "--format", "jsonl"), "VALIDATION_FAILED")
     for long, argument in GLOBAL_OPTIONS.items():
-        words = [long, argument["choices"][0]] if argument else [long]
+        words = [long, argument["choices"][0] if argument.get("choices") else "x"] if argument else [long]
         check_failure(report, f"duplicate {long} fails with VALIDATION_FAILED",
                       program.run("version", *words, *words, *([] if long == "--json" else ["--json"])),
                       "VALIDATION_FAILED")

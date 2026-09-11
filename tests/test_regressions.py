@@ -14,7 +14,7 @@ import unittest
 from support import FixtureProgram, ROOT
 
 sys.path.insert(0, str(ROOT / "conformance"))
-from run import Program, Report, SCHEMAS, check_jsonl, envelope, main, run_kit, text_records
+from run import Program, Report, SCHEMAS, check_jsonl, envelope, field_jsonl, field_text, main, run_kit, text_records
 from validate import json_equal, unsupported_keywords, validate
 
 
@@ -157,6 +157,23 @@ class KitRegressionTest(unittest.TestCase):
         self.assertEqual(text_records([]), "")
         for renderer in (text_records, FixtureProgram().fixture.record_text):
             self.assertEqual(renderer([{"a": "\x1b[31m\x00\x7f"}]), "\\u001b[31m\\u0000\\u007f\n")
+
+    def test_field_renders_every_shape_the_same_in_both_implementations(self):
+        fixture = FixtureProgram().fixture
+        for value, text, lines in (
+                ([{"b": 1, "a": "x"}, {"a": "", "c": None}], "x\t1\t\n\t\tnull\n", '{"b":1,"a":"x"}\n{"a":"","c":null}\n'),
+                (["a\tb", "c"], "a\\tb\nc\n", '"a\\tb"\n"c"\n'),
+                ([1, {"a": 2}], '1\n{"a":2}\n', '1\n{"a":2}\n'),
+                ([], "", ""),
+                ({"z": True, "a": "v"}, "v\ttrue\n", '{"z":true,"a":"v"}\n'),
+                ("plain", "plain\n", '"plain"\n'),
+                (0, "0\n", "0\n"),
+                (None, "null\n", "null\n"),
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(field_text(value), text)
+                self.assertEqual(fixture.field_text(value), text)
+                self.assertEqual(field_jsonl(value), lines)
 
     def test_jsonl_compares_records_and_types_not_only_line_count(self):
         for output in ('{"word":"other"}\n', 'garbage\n', 'true\n', '{"word":"a"}\n\n'):

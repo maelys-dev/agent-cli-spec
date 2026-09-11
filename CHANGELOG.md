@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.4.0 — 2026-09-11
+
+- Add `--field NAME` to the trunk of global options: it renders one
+  top-level member of `data` instead of the whole result, so that a human
+  reads a member without a query tool. Never a path, because a path language
+  is the trade of `jq` and half of one is worse than none. A name `data` does
+  not carry fails with `VALIDATION_FAILED`, never an empty output, a silent
+  empty result in a pipe being the costliest failure mode. In text mode the
+  member follows the pipe rules of section 7, extended to the shapes that
+  section did not cover: an array of objects gives one row per object, any
+  other array one value per line, an object one row with its members as
+  columns, any other value its escaped value on one line. In `jsonl` mode an
+  array gives one compact JSON value per line and any other member exactly
+  one line, so `--format jsonl` is now accepted by a `json-records` command
+  and by any command together with `--field`. Decision: five implementations
+  needed the same thing at once, and one spelling across products is what the
+  contract exists for. The alternative, making `jsonl` valid on a
+  `json-envelope` command when the data happens to hold an array, was
+  rejected: the validity of a format must follow the command's declared mode
+  and never the shape of the data, else `describe` no longer tells an agent
+  which formats work. `--field` with `--format json` fails with
+  `VALIDATION_FAILED`, since `data` is governed by the descriptor's
+  `outputSchema` and a filtered envelope would no longer validate. `--field`
+  is a rendering option, refused by a `protocol-stream` command and received
+  verbatim by a delegate; it pages like any text rendering, changes no exit
+  code and leaves the failure rendering alone. A program conformant to 2.3.1
+  moves to 2.4.0 by declaring `--field` in `globalOptions` and accepting it.
+  The kit checks the declaration and its shape, the rendering of a scalar, an
+  array, an array of objects and an object in both formats, the two refusals
+  and the duplicate refusal.
+
 ## 2.3.1 — 2026-09-06
 
 - The motif of `--prefix` in section 1, the schema and the fixture is

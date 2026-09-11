@@ -124,7 +124,8 @@ class KitTest(unittest.TestCase):
                                  ("jsonl-noise", "preserves records"),
                                  ("malformed-jsonl", "records"),
                                  ("text-garbage", "one plain line per record"),
-                                 ("pager-in-pipe", "never starts a pager")):
+                                 ("pager-in-pipe", "never starts a pager"),
+                                 ("field-silent", "does not carry")):
             with self.subTest(defect=defect):
                 report = run_kit(FixtureProgram(defect))
                 self.assertFalse(report.passed)
