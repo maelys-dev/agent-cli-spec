@@ -188,6 +188,7 @@ Every program accepts, on every command:
 | `--progress auto\|always\|never` | progress of a long run on stderr, in text mode, when stderr is a terminal (default `auto`) |
 | `--verbose` | details of the run on stderr, in text mode only (default silent) |
 | `--pager auto\|always\|never` | pager for the text rendering when stdout is a terminal (default `auto`) |
+| `--field NAME` | render one member of `data`, in text or `jsonl` |
 | `--help` | the help of the selected command |
 
 None of these options is repeatable; a duplicate fails with
@@ -241,7 +242,34 @@ rendering option: a `protocol-stream` command refuses it when given, as
 section 9 says, and a delegate receives it verbatim. A program without a
 pager accepts the option and writes to stdout as before.
 
-`--format jsonl` is accepted only by `json-records` commands. A
+`--field NAME` renders one member of `data` instead of the whole result, so
+that a human reads a member without a query tool. `NAME` is a top-level
+member of `data`, never a path: a path language is the trade of `jq`, and
+half of one is worse than none. A name `data` does not carry fails with
+`VALIDATION_FAILED`, never an empty output, because a silent empty result in
+a pipe is the costliest failure mode.
+
+In text mode the member is rendered by the pipe rules of section 7. An array
+whose every element is an object gives one row per object, the columns being
+the sorted union of their top-level member names; any other array gives one
+value per line; an object gives one row with its members as columns; any
+other value gives its escaped value on one line. An empty array gives no
+lines. A header is allowed on a terminal only, and only where there are
+columns to label. In `jsonl` mode an array gives one compact JSON value per
+line and any other member gives exactly one line; the rendering is total, so
+`--field NAME --format jsonl` is valid on every command and what a format
+accepts is read in the invocation and in the catalog, never in the data.
+
+`--field` with `--format json` fails with `VALIDATION_FAILED`: `data` is
+governed by the descriptor's `outputSchema`, and a filtered envelope would no
+longer validate against it. `--field` is a rendering option: a
+`protocol-stream` command refuses it, a delegate receives it verbatim. It
+pages like any text rendering, changes no exit code, and leaves the failure
+rendering alone, a failure carrying no `data`. On a `json-records` command
+`--field records` is allowed and renders what the command already renders.
+
+`--format jsonl` is accepted by a `json-records` command, and by any command
+together with `--field`. A
 `protocol-stream` command refuses every rendering option. An implementation
 MAY honor an environment variable that selects the default format
 (`MAELYS_CLI_FORMAT` in the Maelys implementations), so that an agent obtains
@@ -304,7 +332,7 @@ Each row ends with a newline, with no header or terminal escape sequences.
 Column order does not depend on `outputSchema`, whose job is validation.
 Thus `wc -l`, `cut` and `grep` see records and nothing else. The stable machine
 form is `jsonl`: the columns in text can vary with the members present in a
-result. Text is not a lossless interchange format (an absent member and an
+result. `--field` of section 5 applies these rules to one member of `data`. Text is not a lossless interchange format (an absent member and an
 empty string both render as an empty field).
 
 Text rendering of a failure is `PROGRAM: [CODE] message` on stderr, followed

@@ -42,6 +42,7 @@ GLOBAL_OPTIONS = [
     option("--pager", "Pager on a terminal.", {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
            "auto"),
     option("--color", "Colors.", {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]}, "auto"),
+    option("--field", "Render one member of data.", {"name": "NAME", "type": "string"}),
     option("--help", "Help."),
 ]
 
@@ -118,22 +119,27 @@ def fail(command_id, code, message, fmt, compact):
     return 1
 
 
+def cell(value):
+    if isinstance(value, str):
+        text = value.replace("\\", "\\\\").replace("\t", "\\t").replace("\r", "\\r").replace("\n", "\\n")
+        return "".join(f"\\u{ord(char):04x}" if ord(char) < 32 or ord(char) == 127 else char for char in text)
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
 def record_text(records):
     columns = sorted(set().union(*(record.keys() for record in records)))
-    rows = []
-    for record in records:
-        fields = []
-        for key in columns:
-            if key not in record:
-                fields.append("")
-            elif isinstance(record[key], str):
-                value = record[key].replace("\\", "\\\\").replace("\t", "\\t").replace("\r", "\\r").replace("\n", "\\n")
-                value = "".join(f"\\u{ord(char):04x}" if ord(char) < 32 or ord(char) == 127 else char for char in value)
-                fields.append(value)
-            else:
-                fields.append(json.dumps(record[key], ensure_ascii=False, separators=(",", ":")))
-        rows.append("\t".join(fields) + "\n")
-    return "".join(rows)
+    return "".join("\t".join(cell(record[key]) if key in record else "" for key in columns) + "\n" for record in records)
+
+
+def field_text(value):
+    """Spec 2.4 section 5: the pipe rendering of one member of data, whatever its shape."""
+    if isinstance(value, list):
+        if value and all(isinstance(item, dict) for item in value):
+            return record_text(value)
+        return "".join(cell(item) + "\n" for item in value)
+    if isinstance(value, dict):
+        return record_text([value])
+    return cell(value) + "\n"
 
 
 def main(argv):
@@ -194,6 +200,8 @@ def main(argv):
             options[name] = value is True or value == "true"
         elif argument.get("type") == "choice" and value not in argument["choices"]:
             return fail(selected["id"], "VALIDATION_FAILED", f"Invalid choice for {name}.", fmt, compact)
+    if "--field" in options and fmt == "json":
+        return fail(selected["id"], "VALIDATION_FAILED", "--field is not available with --format json.", fmt, compact)
     if selected["id"] == "describe" and "--prefix" in options:
         prefix = options["--prefix"]
         if not options.get("--summary"):
@@ -204,7 +212,7 @@ def main(argv):
             return fail("describe", "VALIDATION_FAILED", "--prefix requires PREFIX.", fmt, compact)
         if re.fullmatch(r"[a-z]([a-z0-9.-]*[a-z0-9-])?", prefix) is None:
             return fail("describe", "VALIDATION_FAILED", "--prefix is not a valid command prefix.", fmt, compact)
-    if fmt == "jsonl" and selected["outputMode"] != "json-records":
+    if fmt == "jsonl" and selected["outputMode"] != "json-records" and "--field" not in options:
         return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
     identifier = selected["id"]
     verbose = options.get("--verbose", False)
@@ -279,6 +287,16 @@ def main(argv):
     else:
         data = {"mode": "apply" if options.get("--apply") else "plan", "changed": False}
         text = f"note: {data['mode']}\n"
+    field = options.get("--field")
+    if field is not None:
+        if field not in data:
+            if BREAK != "field-silent":
+                return fail(identifier, "VALIDATION_FAILED", f"No member {field!r} in data.", fmt, compact)
+            data[field] = []
+        text = field_text(data[field])
+        emitted = data[field] if isinstance(data[field], list) else [data[field]]
+    else:
+        emitted = data.get("records", [])
     paging = fmt == "text" and pager != "never" and not options.get("--non-interactive", False) \
         and (sys.stdout.isatty() or BREAK == "pager-in-pipe" and pager == "always") \
         and os.environ.get("PAGER", "less") != ""
@@ -301,7 +319,7 @@ def main(argv):
     elif fmt == "jsonl":
         if BREAK == "jsonl-noise" and (verbose or progress == "always"):
             sys.stdout.write("diagnostic noise\n")
-        for record in data["records"]:
+        for record in emitted:
             sys.stdout.write("not-json\n" if BREAK == "malformed-jsonl" else json.dumps(record, separators=(",", ":")) + "\n")
     else:
         sys.stdout.write(envelope(identifier, True, 0, data, compact))
