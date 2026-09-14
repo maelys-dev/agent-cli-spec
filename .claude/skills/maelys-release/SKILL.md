@@ -57,13 +57,14 @@ the first Linux build of the product.
 
 ## Change release or packaging files
 
-- `.github/workflows/release.yml` and `scripts/checkout-dependency.sh`:
+- `.github/workflows/release.yml` and the two `scripts/checkout-dependenc*.sh`:
   never by hand. They are generated from `dependencies/*.pin`, `dependencies/packages`
   and `packaging/homebrew/*.rb.in`; change those, then run
   `bin/maelys-release adopt DIR --apply` from a maelys-release checkout at
   the target tag; check drift with `bin/maelys-release check DIR`. Every
-  command answers `--format json` with an agent-cli/v2 envelope and
-  `describe --format json` returns the catalog.
+  command answers `--format json` with an agent-cli/v2 envelope,
+  `describe --format json` returns the catalog, and `--field NAME` reads one
+  member of the result without a `jq` expression.
 - `dependencies/<name>.pin`: nearest tag on line 1, pinned commit on line 2.
   `scripts/checkout-dependency.sh NAME` clones the dependency at that
   commit; write no other checkout script.
@@ -87,7 +88,7 @@ the first Linux build of the product.
 
 - push a tag whose commit did not pass `make check`;
 - force-push or delete a published tag;
-- edit a generated file by hand: `release.yml`, `checkout-dependency.sh`,
+- edit a generated file by hand: `release.yml`, either `checkout-dependenc*.sh`,
   anything under `docs/generated/`;
 - install packages from a checkout script or from `package-release.sh`;
   declare them in `dependencies/packages`;
