@@ -38,5 +38,9 @@ checkout at the wanted tag; `maelys-release check DIR` reports drift with exit 2
 `release.yml` accepts a `workflow_dispatch` whose `tag` input names an
 existing signed tag, and replays the whole release for it, the formula
 included where a product declares one. Adopt a corrected socle on the default
-branch first, then `gh workflow run release.yml -f tag=vX.Y.Z`. A tag is never
+branch first, then `gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z`.
+`--ref` names the tag: the `release` environment accepts tags `v*` alone, so a
+run started from the default branch is refused at `publish`. A replay runs the
+socle that tag pinned; when the socle is at fault, the remedy is a new patch
+release carrying the corrected pin. A tag is never
 moved or recreated.
