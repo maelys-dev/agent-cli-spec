@@ -406,7 +406,10 @@ The catalog is the executable source of truth: the parser, `help`,
 maintains a second usage string. Any command change updates, in the same
 change, the catalog entry, the handler, the output schema, the tests and the
 generated reference. The conformance kit is run in the implementation's
-continuous integration against its own binaries.
+continuous integration against its own binaries. A framework's products
+exercise only the declarations they happen to use, and a declaration nothing
+exercises is a declaration nothing has judged, so a framework also runs the
+kit against a program of its own that declares every form it offers.
 
 ## 11. Versions of this contract
 
@@ -415,7 +418,16 @@ or addition (a new optional member, a new value kind, a new invocation that
 leaves existing invocation semantics and machine documents unchanged) is a new tag of this
 repository and keeps the identifier. Such an addition may be mandatory in the
 text of the tag that introduces it: an implementation is conformant to the
-tag it pins, and takes the addition on when it moves its pin. An agent that
+tag it pins, and takes the addition on when it moves its pin.
+
+An implementation is a program, or a framework that programs are built on. A
+framework owns the trunk of section 5 for its products: such a product
+declares none of it and reaches a tag only once its framework has. A
+migration note addresses whoever writes the trunk, which for that product is
+its framework; the product's own move is to the framework's release that
+carries the addition, and pinning this repository earlier buys it nothing.
+
+An agent that
 reads `agent-cli/v2` therefore relies on the catalog, not on the identifier,
 to know which forms a program accepts. An incompatible change (a member
 removed, a meaning changed, a required member added to an existing document)

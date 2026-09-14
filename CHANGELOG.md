@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.5.1 — 2026-09-14
+
+- Section 11 says who a migration note addresses. An implementation is a
+  program, or a framework that programs are built on, and a framework owns
+  the trunk of section 5 for its products: such a product declares none of it
+  and reaches a tag only once its framework has. The notes of 2.3.0, 2.4.0
+  and 2.5.0 read as though every implementation were independent, so a
+  product built on a framework had to discover by pinning that the move was
+  not its to make. Reported by a product of the fleet, which could declare
+  nothing of `--field` until its framework had shipped it.
+- Section 10 says what a framework owes the kit. Its products exercise only
+  the declarations they happen to use, and a declaration nothing exercises is
+  a declaration nothing has judged, so a framework runs the kit against a
+  program of its own declaring every form it offers. This is the lesson of
+  the two members 2.5.0 answered, found by a property test and not by the
+  kit; the kit's report has named the blind spot since 2.5.0, and the text
+  now names the remedy.
+
 ## 2.5.0 — 2026-09-14
 
 - Section 2, constraints: `input.constraints` **states** the cross-option
