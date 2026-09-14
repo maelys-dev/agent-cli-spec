@@ -132,7 +132,10 @@
         "type": {"$ref": "#/definitions/kind"},
         "choices": {"type": "array", "items": {"type": "string"}, "minItems": 1},
         "minimum": {"type": "number"},
-        "maximum": {"type": "number"}
+        "maximum": {"type": "number"},
+        "algorithms": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "digits": {"type": ["integer", "array"], "items": {"type": "integer"}},
+        "pattern": {"type": "string"}
       },
       "patternProperties": {"^x-": {}},
       "additionalProperties": false

@@ -86,10 +86,16 @@ CATALOG = [
 ]
 # Every member the contract allows, so that the schema and the kit meet each of them once.
 CATALOG.append(command(
-    "limits", ["limits"], "limits TARGET [COUNT...] [--lenient|--strict] [--paired-a --paired-b]",
+    "limits", ["limits"], "limits TARGET [REF] [LABEL] [SUM] [COUNT...] [--lenient|--strict] [--paired-a --paired-b]",
     "Exercise every declaration the contract allows.", "read",
     [{"name": "TARGET", "required": True, "variadic": False, "summary": "Target.", "type": "choice",
       "choices": ["near", "far"]},
+     {"name": "REF", "required": False, "variadic": False, "summary": "A digest of either width.",
+      "type": "digest", "algorithms": ["sha256", "sha1"], "digits": [40, 64]},
+     {"name": "LABEL", "required": False, "variadic": False, "summary": "A matched label.",
+      "type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+     {"name": "SUM", "required": False, "variadic": False, "summary": "A fixed-width hex sum.",
+      "type": "hex", "digits": 64},
      {"name": "COUNT", "required": False, "variadic": True, "summary": "Counts.", "type": "unsigned",
       "minimum": 0, "maximum": 64, "x-unit": "items"}],
     [option("--lenient", "Loosen.", conflicts=["--strict"]),

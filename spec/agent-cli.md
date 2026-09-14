@@ -99,8 +99,10 @@ undeclared members.
 ### Operands
 
 `name`, `required`, `variadic`, `summary`; optionally `type` with the value
-kinds of section 3, `choices`, `minimum`, `maximum`. At most one operand is
-variadic, and it is the last one. `passthrough: true` means every argument
+kinds of section 3 and whatever that kind needs: `choices`, `minimum`,
+`maximum`, `algorithms`, `digits`, `pattern`. An operand describes its value
+exactly as an option's `argument` does, so a kind that needs a member needs
+it in both places. At most one operand is variadic, and it is the last one. `passthrough: true` means every argument
 after the pattern reaches the command verbatim, including `--help`.
 
 ### Options
