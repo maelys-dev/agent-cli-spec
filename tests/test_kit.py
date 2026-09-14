@@ -141,6 +141,15 @@ class CoverageTest(unittest.TestCase):
         walk(SCHEMAS["describe"])
         return names, values
 
+    def test_an_operand_describes_its_value_as_an_argument_does(self) -> None:
+        """The schema was narrower than the text: an operand could carry a `digest` kind and
+        not the `algorithms` section 3 says that kind declares. The two definitions agree now,
+        and this holds them together."""
+        definitions = SCHEMAS["describe"]["definitions"]
+        value = {"type", "choices", "minimum", "maximum", "algorithms", "digits", "pattern"}
+        self.assertEqual(value & set(definitions["operand"]["properties"]),
+                         value & set(definitions["argument"]["properties"]))
+
     def test_the_committed_reference_is_the_fixture_output(self) -> None:
         """examples/reference.describe.json ships in the archive; regenerate it with
         `python3 tests/fixtures/conformant.py describe --json` when the fixture changes."""

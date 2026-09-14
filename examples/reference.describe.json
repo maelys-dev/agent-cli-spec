@@ -422,7 +422,7 @@
       "pattern": [
         "limits"
       ],
-      "usage": "limits TARGET [COUNT...] [--lenient|--strict] [--paired-a --paired-b]",
+      "usage": "limits TARGET [REF] [LABEL] [SUM] [COUNT...] [--lenient|--strict] [--paired-a --paired-b]",
       "purpose": "Exercise every declaration the contract allows.",
       "effect": "read",
       "outputMode": "json-envelope",
@@ -430,7 +430,7 @@
       "hidden": false,
       "available": true,
       "input": {
-        "synopsis": "limits TARGET [COUNT...] [--lenient|--strict] [--paired-a --paired-b]",
+        "synopsis": "limits TARGET [REF] [LABEL] [SUM] [COUNT...] [--lenient|--strict] [--paired-a --paired-b]",
         "operands": [
           {
             "name": "TARGET",
@@ -442,6 +442,37 @@
               "near",
               "far"
             ]
+          },
+          {
+            "name": "REF",
+            "required": false,
+            "variadic": false,
+            "summary": "A digest of either width.",
+            "type": "digest",
+            "algorithms": [
+              "sha256",
+              "sha1"
+            ],
+            "digits": [
+              40,
+              64
+            ]
+          },
+          {
+            "name": "LABEL",
+            "required": false,
+            "variadic": false,
+            "summary": "A matched label.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          {
+            "name": "SUM",
+            "required": false,
+            "variadic": false,
+            "summary": "A fixed-width hex sum.",
+            "type": "hex",
+            "digits": 64
           },
           {
             "name": "COUNT",

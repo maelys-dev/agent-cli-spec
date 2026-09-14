@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.6.0 — 2026-09-14
+
+- An operand may declare `algorithms`, `digits` and `pattern`, which only an
+  option's `argument` could carry before. The schema was narrower than the
+  text: section 2 let an operand take "`type` with the value kinds of section
+  3", section 3 says a `digest` is `ALGORITHM:HEX` with "`algorithms`
+  declared" and that `pattern` constrains a `string` or `path` value, and the
+  `operand` definition admitted neither. A `digest` operand could therefore
+  not be described conformantly at all, and a `hex` operand could not state
+  its width while an option's argument could. Section 2 now says an operand
+  describes its value exactly as an argument does, and a test holds the two
+  definitions to the same value-describing members so they cannot drift
+  apart again. Reported by maelys-git-core, reading the framework's hex
+  operands against the 2.4.0 schema.
+- Nothing is required of an implementation: the three members are optional
+  and a document valid under 2.5.1 stays valid. A program that avoided
+  digest operands because it could not describe them may now declare them.
+  The fixture carries one of each and the committed reference catalog
+  carries them too.
+
 ## 2.5.1 — 2026-09-14
 
 - Section 11 says who a migration note addresses. An implementation is a
