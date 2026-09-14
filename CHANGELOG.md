@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.5.0 — 2026-09-14
+
+- Section 2, constraints: `input.constraints` **states** the cross-option
+  rules rather than repeating them. The former word was false for one kind
+  of four: `requires`, `at-most-one` and `all-or-none` have an option-level
+  form, `exactly-one` has none, so for it `input.constraints` is the only
+  site. An entry's `options` is the whole rule, so two all-or-none groups are
+  two entries and no entry needs a name. `all-or-none` is the one kind that
+  MUST agree with the options, `group` being its option-level form: the
+  options of an entry are exactly the options sharing one `group`, and every
+  `group` of a command has its entry. The kit checks that agreement, which
+  is why this is a minor and not a patch: a program that declared a `group`
+  without its entry passed the 2.4.0 kit and fails this one. The other kinds
+  keep restating an option-level rule or not, as they do today.
+- `spec/extensions.md` names every object a `describe` document may extend
+  with `x-`. Its list stopped at the catalog, a descriptor, an operand and
+  an option, while the schemas have always opened `x-` on `input`, an
+  argument, a constraint, a transaction effect and the filter of a filtered
+  summary as well. The schema was wider than the text, the inverse of the
+  defect this repository usually guards against, and the text now matches.
+  Section 2 points at that list instead of naming descriptors alone.
+- Ship `examples/reference.describe.json`: one catalog carrying every member
+  and every enumerated value the contract allows, generated from the
+  conformant fixture and held equal to it by a test, so an implementer reads
+  in one document what a `describe` may contain. The fixture gained the
+  declarations it lacked: a grouped pair, all four constraint kinds, every
+  value kind, a protocol stream, a delegate, a `commit` transaction,
+  passthrough and `x-` members on each object. Two tests walk the schema and
+  assert that no member name and no enumerated value is missing from the
+  fixture's output, so the claim cannot rot.
+- The kit's report names one more thing it does not check: declarations a
+  program never emits. A kit sees what a program chooses to show, so a
+  framework whose macros exceed what its products use checks its own output
+  over every declaration it offers. Reported by maelys-cli, whose property
+  test over 29 declaration macros found two members this contract refuses.
+
 ## 2.4.0 — 2026-09-11
 
 - Add `--field NAME` to the trunk of global options: it renders one

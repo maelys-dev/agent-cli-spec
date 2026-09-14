@@ -469,6 +469,14 @@ def _run_kit(program: Program, report: Report) -> Report:
                        if entry not in declared_options]
         report.add(f"{identifier}: requires and conflictsWith name declared options or operands", not unresolved,
                    f"unresolved {unresolved}")
+        groups: dict[str, set] = {}
+        for item in command["input"]["options"]:
+            if item.get("group"):
+                groups.setdefault(item["group"], set()).add(item["long"])
+        entries = [set(rule["options"]) for rule in command["input"]["constraints"] if rule["kind"] == "all-or-none"]
+        report.add(f"{identifier}: every all-or-none entry is exactly one group of options",
+                   sorted(map(sorted, entries)) == sorted(map(sorted, groups.values())),
+                   f"entries {[sorted(item) for item in entries]}, groups {[sorted(item) for item in groups.values()]}")
         variadic = [index for index, item in enumerate(command["input"]["operands"]) if item["variadic"]]
         report.add(f"{identifier}: at most the last operand is variadic",
                    not variadic or variadic == [len(command["input"]["operands"]) - 1])
@@ -723,7 +731,10 @@ def main(argv: list[str]) -> int:
                "checks": report.checks, "counts": {"passed": passed, "failed": failed, "skipped": skipped},
                "scope": {"catalog": "all descriptors", "invocations": "built-ins and safe hidden-option probes",
                          "notChecked": ["product business behavior and writes", "protocol streams and delegates",
-                                        "terminal rendering (tested separately by implementations)"]}}
+                                        "terminal rendering (tested separately by implementations)",
+                                        "declarations the program never emits: a kit sees what a program chooses "
+                                        "to show, so a framework checks its own output over every declaration "
+                                        "it offers"]}}
     if report_path:
         try:
             report_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")

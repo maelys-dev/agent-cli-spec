@@ -95,6 +95,71 @@ class ValidatorTest(unittest.TestCase):
         self.assertTrue(validate(document, SCHEMAS["describe"]))
 
 
+class CoverageTest(unittest.TestCase):
+    """A member no document carries is a member no test has ever judged: hold the fixture
+    to every member name and every enumerated value schemas/describe.json allows."""
+
+    def collected(self):
+        program = FixtureProgram()
+        names, values = set(), set()
+        def walk(node):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    names.add(key)
+                    if isinstance(value, str):
+                        values.add(value)
+                    walk(value)
+            elif isinstance(node, list):
+                for item in node:
+                    walk(item)
+        for arguments in (("describe",), ("describe", "--summary"), ("describe", "--summary", "--prefix", "note"),
+                          ("describe", "limits")):
+            body = json.loads(program.run(*arguments, "--json").stdout)
+            self.assertTrue(body["ok"], arguments)
+            walk(body["data"])
+        return names, values
+
+    def expected(self):
+        names, values = set(), set()
+        def walk(node):
+            if not isinstance(node, dict):
+                return
+            for name, child in node.get("properties", {}).items():
+                names.add(name)
+                walk(child)
+            for child in node.get("definitions", {}).values():
+                walk(child)
+            for key in ("items", "additionalProperties", "not", "if", "then", "else"):
+                if isinstance(node.get(key), dict):
+                    walk(node[key])
+            for key in ("oneOf", "anyOf", "allOf"):
+                for child in node.get(key, []):
+                    walk(child)
+            values.update(item for item in node.get("enum", []) if isinstance(item, str))
+            if isinstance(node.get("const"), str):
+                values.add(node["const"])
+        walk(SCHEMAS["describe"])
+        return names, values
+
+    def test_the_committed_reference_is_the_fixture_output(self) -> None:
+        """examples/reference.describe.json ships in the archive; regenerate it with
+        `python3 tests/fixtures/conformant.py describe --json` when the fixture changes."""
+        catalog = json.loads(FixtureProgram().run("describe", "--json").stdout)["data"]
+        committed = json.loads((ROOT / "examples" / "reference.describe.json").read_text())
+        self.assertEqual(committed, catalog)
+        self.assertEqual(validate(committed, SCHEMAS["describe"]), [])
+
+    def test_the_fixture_carries_every_member_the_schema_allows(self) -> None:
+        present, _ = self.collected()
+        missing, _ = self.expected()
+        self.assertEqual(sorted(missing - present), [])
+
+    def test_the_fixture_carries_every_enumerated_value(self) -> None:
+        _, present = self.collected()
+        _, missing = self.expected()
+        self.assertEqual(sorted(missing - present), [])
+
+
 class KitTest(unittest.TestCase):
     def test_conformant_fixture_passes(self) -> None:
         completed = kit(sys.executable, str(FIXTURE))

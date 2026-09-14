@@ -1,0 +1,816 @@
+{
+  "schemaVersion": 1,
+  "program": "conformant",
+  "product": "Conformant",
+  "version": "1.0.0",
+  "contract": "agent-cli/v2",
+  "cliApi": 1,
+  "framework": "fixture",
+  "kind": "catalog",
+  "globalOptions": [
+    {
+      "long": "--format",
+      "required": false,
+      "repeatable": false,
+      "summary": "Rendering.",
+      "requires": [],
+      "conflictsWith": [],
+      "argument": {
+        "name": "VALUE",
+        "type": "choice",
+        "choices": [
+          "text",
+          "json",
+          "jsonl"
+        ]
+      },
+      "default": "text"
+    },
+    {
+      "long": "--json",
+      "required": false,
+      "repeatable": false,
+      "summary": "Alias of --format json.",
+      "requires": [],
+      "conflictsWith": []
+    },
+    {
+      "long": "--compact",
+      "required": false,
+      "repeatable": false,
+      "summary": "One line.",
+      "requires": [],
+      "conflictsWith": []
+    },
+    {
+      "long": "--pretty",
+      "required": false,
+      "repeatable": false,
+      "summary": "Indent.",
+      "requires": [],
+      "conflictsWith": []
+    },
+    {
+      "long": "--non-interactive",
+      "required": false,
+      "repeatable": false,
+      "summary": "Never prompt.",
+      "requires": [],
+      "conflictsWith": []
+    },
+    {
+      "long": "--verbose",
+      "required": false,
+      "repeatable": false,
+      "summary": "Details of the run on stderr.",
+      "requires": [],
+      "conflictsWith": []
+    },
+    {
+      "long": "--progress",
+      "required": false,
+      "repeatable": false,
+      "summary": "Progress on stderr.",
+      "requires": [],
+      "conflictsWith": [],
+      "argument": {
+        "name": "VALUE",
+        "type": "choice",
+        "choices": [
+          "auto",
+          "always",
+          "never"
+        ]
+      },
+      "default": "auto"
+    },
+    {
+      "long": "--pager",
+      "required": false,
+      "repeatable": false,
+      "summary": "Pager on a terminal.",
+      "requires": [],
+      "conflictsWith": [],
+      "argument": {
+        "name": "VALUE",
+        "type": "choice",
+        "choices": [
+          "auto",
+          "always",
+          "never"
+        ]
+      },
+      "default": "auto"
+    },
+    {
+      "long": "--color",
+      "required": false,
+      "repeatable": false,
+      "summary": "Colors.",
+      "requires": [],
+      "conflictsWith": [],
+      "argument": {
+        "name": "VALUE",
+        "type": "choice",
+        "choices": [
+          "auto",
+          "always",
+          "never"
+        ]
+      },
+      "default": "auto"
+    },
+    {
+      "long": "--field",
+      "required": false,
+      "repeatable": false,
+      "summary": "Render one member of data.",
+      "requires": [],
+      "conflictsWith": [],
+      "argument": {
+        "name": "NAME",
+        "type": "string"
+      }
+    },
+    {
+      "long": "--help",
+      "required": false,
+      "repeatable": false,
+      "summary": "Help.",
+      "requires": [],
+      "conflictsWith": []
+    }
+  ],
+  "invariants": [
+    "one catalog"
+  ],
+  "output": {
+    "contract": "agent-cli/v2",
+    "schemaVersion": 2,
+    "stdout": "success data only",
+    "stderr": "diagnostics and failure envelopes"
+  },
+  "commands": [
+    {
+      "id": "help",
+      "pattern": [
+        "help"
+      ],
+      "usage": "help [COMMAND_ID] | --help",
+      "purpose": "Help.",
+      "effect": "read",
+      "outputMode": "json-envelope",
+      "external": false,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "help [COMMAND_ID] | --help",
+        "operands": [
+          {
+            "name": "COMMAND_ID",
+            "required": false,
+            "variadic": false,
+            "summary": "Identifier."
+          }
+        ],
+        "options": [],
+        "constraints": [],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      }
+    },
+    {
+      "id": "version",
+      "pattern": [
+        "version"
+      ],
+      "usage": "version | --version",
+      "purpose": "Identity.",
+      "effect": "read",
+      "outputMode": "json-envelope",
+      "external": false,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "version | --version",
+        "operands": [],
+        "options": [],
+        "constraints": [],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      }
+    },
+    {
+      "id": "describe",
+      "pattern": [
+        "describe"
+      ],
+      "usage": "describe [COMMAND_ID] [--summary] [--prefix PREFIX]",
+      "purpose": "Catalog.",
+      "effect": "read",
+      "outputMode": "json-envelope",
+      "external": false,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "describe [COMMAND_ID] [--summary] [--prefix PREFIX]",
+        "operands": [
+          {
+            "name": "COMMAND_ID",
+            "required": false,
+            "variadic": false,
+            "summary": "Identifier."
+          }
+        ],
+        "options": [
+          {
+            "long": "--summary",
+            "required": false,
+            "repeatable": false,
+            "summary": "Without schemas.",
+            "requires": [],
+            "conflictsWith": []
+          },
+          {
+            "long": "--prefix",
+            "required": false,
+            "repeatable": false,
+            "summary": "Select a command namespace.",
+            "requires": [
+              "--summary"
+            ],
+            "conflictsWith": [
+              "COMMAND_ID"
+            ],
+            "argument": {
+              "name": "PREFIX",
+              "type": "string",
+              "pattern": "^[a-z]([a-z0-9.-]*[a-z0-9-])?$"
+            }
+          },
+          {
+            "long": "--trace",
+            "required": false,
+            "repeatable": false,
+            "summary": "Trace the catalog lookup.",
+            "requires": [],
+            "conflictsWith": [],
+            "hidden": true
+          }
+        ],
+        "constraints": [
+          {
+            "kind": "requires",
+            "options": [
+              "--prefix",
+              "--summary"
+            ]
+          }
+        ],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      }
+    },
+    {
+      "id": "completion",
+      "pattern": [
+        "completion"
+      ],
+      "usage": "completion SHELL",
+      "purpose": "Completion script.",
+      "effect": "read",
+      "outputMode": "json-envelope",
+      "external": false,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "completion SHELL",
+        "operands": [
+          {
+            "name": "SHELL",
+            "required": true,
+            "variadic": false,
+            "summary": "Shell.",
+            "type": "choice",
+            "choices": [
+              "bash",
+              "zsh",
+              "fish"
+            ]
+          }
+        ],
+        "options": [],
+        "constraints": [],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      }
+    },
+    {
+      "id": "complete.candidates",
+      "pattern": [
+        "__complete"
+      ],
+      "usage": "__complete -- WORDS...",
+      "purpose": "Candidates.",
+      "effect": "read",
+      "outputMode": "json-records",
+      "external": false,
+      "hidden": true,
+      "available": true,
+      "input": {
+        "synopsis": "__complete -- WORDS...",
+        "operands": [
+          {
+            "name": "WORDS",
+            "required": false,
+            "variadic": true,
+            "summary": "Words."
+          }
+        ],
+        "options": [],
+        "constraints": [],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      }
+    },
+    {
+      "id": "note.write",
+      "pattern": [
+        "note",
+        "write"
+      ],
+      "usage": "note write FILE [--apply]",
+      "purpose": "Store a note.",
+      "effect": {
+        "plan": "preview",
+        "apply": "apply"
+      },
+      "outputMode": "json-envelope",
+      "external": false,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "note write FILE [--apply]",
+        "operands": [
+          {
+            "name": "FILE",
+            "required": true,
+            "variadic": false,
+            "summary": "File.",
+            "type": "path"
+          }
+        ],
+        "options": [
+          {
+            "long": "--apply",
+            "required": false,
+            "repeatable": false,
+            "summary": "Write.",
+            "requires": [],
+            "conflictsWith": []
+          }
+        ],
+        "constraints": [],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      }
+    },
+    {
+      "id": "limits",
+      "pattern": [
+        "limits"
+      ],
+      "usage": "limits TARGET [COUNT...] [--lenient|--strict] [--paired-a --paired-b]",
+      "purpose": "Exercise every declaration the contract allows.",
+      "effect": "read",
+      "outputMode": "json-envelope",
+      "external": false,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "limits TARGET [COUNT...] [--lenient|--strict] [--paired-a --paired-b]",
+        "operands": [
+          {
+            "name": "TARGET",
+            "required": true,
+            "variadic": false,
+            "summary": "Target.",
+            "type": "choice",
+            "choices": [
+              "near",
+              "far"
+            ]
+          },
+          {
+            "name": "COUNT",
+            "required": false,
+            "variadic": true,
+            "summary": "Counts.",
+            "type": "unsigned",
+            "minimum": 0,
+            "maximum": 64,
+            "x-unit": "items"
+          }
+        ],
+        "options": [
+          {
+            "long": "--lenient",
+            "required": false,
+            "repeatable": false,
+            "summary": "Loosen.",
+            "requires": [],
+            "conflictsWith": [
+              "--strict"
+            ]
+          },
+          {
+            "long": "--strict",
+            "required": false,
+            "repeatable": false,
+            "summary": "Tighten.",
+            "requires": [],
+            "conflictsWith": [
+              "--lenient"
+            ]
+          },
+          {
+            "long": "--paired-a",
+            "required": false,
+            "repeatable": false,
+            "summary": "First of the pair.",
+            "requires": [],
+            "conflictsWith": [],
+            "group": "pair"
+          },
+          {
+            "long": "--paired-b",
+            "required": false,
+            "repeatable": false,
+            "summary": "Second of the pair.",
+            "requires": [],
+            "conflictsWith": [],
+            "group": "pair"
+          },
+          {
+            "long": "--digest",
+            "required": false,
+            "repeatable": false,
+            "summary": "A digest of either width.",
+            "requires": [],
+            "conflictsWith": [],
+            "argument": {
+              "name": "DIGEST",
+              "type": "digest",
+              "algorithms": [
+                "sha256",
+                "sha1"
+              ],
+              "digits": [
+                40,
+                64
+              ]
+            }
+          },
+          {
+            "long": "--sum",
+            "required": false,
+            "repeatable": false,
+            "summary": "A fixed-width hex sum.",
+            "requires": [],
+            "conflictsWith": [],
+            "argument": {
+              "name": "SUM",
+              "type": "hex",
+              "digits": 64
+            }
+          },
+          {
+            "long": "--budget",
+            "required": false,
+            "repeatable": false,
+            "summary": "A size.",
+            "requires": [],
+            "conflictsWith": [],
+            "argument": {
+              "name": "SIZE",
+              "type": "size"
+            },
+            "default": "1M"
+          },
+          {
+            "long": "--wait",
+            "required": false,
+            "repeatable": false,
+            "summary": "A duration.",
+            "requires": [],
+            "conflictsWith": [],
+            "argument": {
+              "name": "WAIT",
+              "type": "duration"
+            },
+            "default": "5s"
+          },
+          {
+            "long": "--root",
+            "required": false,
+            "repeatable": false,
+            "summary": "An absolute path.",
+            "requires": [],
+            "conflictsWith": [],
+            "argument": {
+              "name": "ROOT",
+              "type": "absolute-path"
+            }
+          },
+          {
+            "long": "--name",
+            "required": false,
+            "repeatable": false,
+            "summary": "A matched name.",
+            "requires": [],
+            "conflictsWith": [],
+            "argument": {
+              "name": "NAME",
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*$"
+            }
+          },
+          {
+            "long": "--depth",
+            "required": false,
+            "repeatable": false,
+            "summary": "A bounded integer.",
+            "requires": [],
+            "conflictsWith": [],
+            "argument": {
+              "name": "DEPTH",
+              "type": "integer",
+              "minimum": -8,
+              "maximum": 8
+            }
+          },
+          {
+            "long": "--report",
+            "required": false,
+            "repeatable": false,
+            "summary": "Where the report goes.",
+            "requires": [
+              "--strict"
+            ],
+            "conflictsWith": [],
+            "argument": {
+              "name": "FILE",
+              "type": "path"
+            }
+          },
+          {
+            "long": "--sha",
+            "required": false,
+            "repeatable": false,
+            "summary": "A sha256.",
+            "requires": [],
+            "conflictsWith": [],
+            "argument": {
+              "name": "SHA",
+              "type": "sha256",
+              "x-hint": "lowercase"
+            }
+          },
+          {
+            "long": "--signed",
+            "required": false,
+            "repeatable": false,
+            "summary": "An explicit boolean.",
+            "requires": [],
+            "conflictsWith": [],
+            "argument": {
+              "name": "FLAG",
+              "type": "boolean"
+            },
+            "default": "true"
+          }
+        ],
+        "constraints": [
+          {
+            "kind": "at-most-one",
+            "options": [
+              "--lenient",
+              "--strict"
+            ]
+          },
+          {
+            "kind": "all-or-none",
+            "options": [
+              "--paired-a",
+              "--paired-b"
+            ]
+          },
+          {
+            "kind": "exactly-one",
+            "options": [
+              "--digest",
+              "--sum"
+            ],
+            "x-note": "one width or the other"
+          },
+          {
+            "kind": "requires",
+            "options": [
+              "--report",
+              "--strict"
+            ]
+          }
+        ],
+        "passthrough": true,
+        "x-form": "exhaustive"
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      },
+      "x-since": "2.4.1"
+    },
+    {
+      "id": "serve",
+      "pattern": [
+        "serve"
+      ],
+      "usage": "serve",
+      "purpose": "Hand stdio to a protocol.",
+      "effect": "stream",
+      "outputMode": "protocol-stream",
+      "external": false,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "serve",
+        "operands": [],
+        "options": [],
+        "constraints": [],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      },
+      "protocol": "mcp-json-rpc"
+    },
+    {
+      "id": "tool",
+      "pattern": [
+        "tool"
+      ],
+      "usage": "tool -- ARGS...",
+      "purpose": "Delegate to a child.",
+      "effect": "execute",
+      "outputMode": "protocol-stream",
+      "external": true,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "tool -- ARGS...",
+        "operands": [],
+        "options": [],
+        "constraints": [],
+        "passthrough": true
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      }
+    },
+    {
+      "id": "note.commit",
+      "pattern": [
+        "note",
+        "commit"
+      ],
+      "usage": "note commit FILE [--apply]",
+      "purpose": "Record a commit.",
+      "effect": {
+        "plan": "preview",
+        "apply": "commit",
+        "x-proof": "revision"
+      },
+      "outputMode": "json-envelope",
+      "external": false,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "note commit FILE [--apply]",
+        "operands": [
+          {
+            "name": "FILE",
+            "required": true,
+            "variadic": false,
+            "summary": "File.",
+            "type": "path"
+          }
+        ],
+        "options": [
+          {
+            "long": "--apply",
+            "required": false,
+            "repeatable": false,
+            "summary": "Commit.",
+            "requires": [],
+            "conflictsWith": []
+          }
+        ],
+        "constraints": [],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      }
+    },
+    {
+      "id": "offline",
+      "pattern": [
+        "offline"
+      ],
+      "usage": "offline",
+      "purpose": "Unavailable in this build.",
+      "effect": "read",
+      "outputMode": "json-envelope",
+      "external": false,
+      "hidden": false,
+      "available": false,
+      "input": {
+        "synopsis": "offline",
+        "operands": [],
+        "options": [],
+        "constraints": [],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      },
+      "unavailableReason": "fixture build has no offline backend"
+    }
+  ]
+}

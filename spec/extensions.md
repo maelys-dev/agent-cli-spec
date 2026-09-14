@@ -8,8 +8,11 @@ agent still reads the trunk and a product-aware agent reads the rest.
 
 ## Members
 
-Any object of a `describe` document (the catalog, a descriptor, an operand,
-an option) MAY carry members whose name starts with `x-`. The conformance
+Any object of a `describe` document MAY carry members whose name starts with
+`x-`: the catalog, a descriptor, its `input`, an operand, an option, an
+argument, a constraint, a transaction effect, the filter of a filtered
+summary. The list is the objects the schemas define, and nothing else in a
+document is an object. The conformance
 kit accepts them and checks nothing about their content; the product's
 documentation defines them. A member without the prefix that the contract
 does not define is a conformance failure.
