@@ -21,13 +21,15 @@ PROGRAM = "conformant"
 EXIT_CODES = {"0": "command completed", "1": "execution failed", "2": "valid report with violations"}
 
 
-def option(long, summary, argument=None, default=None, requires=(), conflicts=(), hidden=False):
+def option(long, summary, argument=None, default=None, requires=(), conflicts=(), hidden=False, group=None):
     item = {"long": long, "required": False, "repeatable": False, "summary": summary,
             "requires": list(requires), "conflictsWith": list(conflicts)}
     if argument:
         item["argument"] = argument
     if hidden:
         item["hidden"] = True
+    if group:
+        item["group"] = group
     if default is not None:
         item["default"] = default
     return item
@@ -48,13 +50,16 @@ GLOBAL_OPTIONS = [
 
 
 def command(identifier, pattern, usage, purpose, effect, operands=(), options=(), constraints=(), hidden=False,
-            mode="json-envelope"):
-    return {"id": identifier, "pattern": pattern, "usage": usage, "purpose": purpose, "effect": effect,
-            "outputMode": mode, "external": False, "hidden": hidden, "available": True,
-            "input": {"synopsis": usage, "operands": list(operands), "options": list(options),
-                      "constraints": list(constraints),
-                      "passthrough": False},
-            "outputSchema": {"type": "object"}, "exitCodes": dict(EXIT_CODES)}
+            mode="json-envelope", passthrough=False, external=False, protocol=None):
+    entry = {"id": identifier, "pattern": pattern, "usage": usage, "purpose": purpose, "effect": effect,
+             "outputMode": mode, "external": external, "hidden": hidden, "available": True,
+             "input": {"synopsis": usage, "operands": list(operands), "options": list(options),
+                       "constraints": list(constraints),
+                       "passthrough": passthrough},
+             "outputSchema": {"type": "object"}, "exitCodes": dict(EXIT_CODES)}
+    if protocol:
+        entry["protocol"] = protocol
+    return entry
 
 
 CATALOG = [
@@ -79,6 +84,45 @@ CATALOG = [
             [{"name": "FILE", "required": True, "variadic": False, "summary": "File.", "type": "path"}],
             [option("--apply", "Write.")]),
 ]
+# Every member the contract allows, so that the schema and the kit meet each of them once.
+CATALOG.append(command(
+    "limits", ["limits"], "limits TARGET [COUNT...] [--lenient|--strict] [--paired-a --paired-b]",
+    "Exercise every declaration the contract allows.", "read",
+    [{"name": "TARGET", "required": True, "variadic": False, "summary": "Target.", "type": "choice",
+      "choices": ["near", "far"]},
+     {"name": "COUNT", "required": False, "variadic": True, "summary": "Counts.", "type": "unsigned",
+      "minimum": 0, "maximum": 64, "x-unit": "items"}],
+    [option("--lenient", "Loosen.", conflicts=["--strict"]),
+     option("--strict", "Tighten.", conflicts=["--lenient"]),
+     option("--paired-a", "First of the pair.", group="pair"),
+     option("--paired-b", "Second of the pair.", group="pair"),
+     option("--digest", "A digest of either width.",
+            {"name": "DIGEST", "type": "digest", "algorithms": ["sha256", "sha1"], "digits": [40, 64]}),
+     option("--sum", "A fixed-width hex sum.", {"name": "SUM", "type": "hex", "digits": 64}),
+     option("--budget", "A size.", {"name": "SIZE", "type": "size"}, "1M"),
+     option("--wait", "A duration.", {"name": "WAIT", "type": "duration"}, "5s"),
+     option("--root", "An absolute path.", {"name": "ROOT", "type": "absolute-path"}),
+     option("--name", "A matched name.", {"name": "NAME", "type": "string", "pattern": "^[a-z][a-z0-9-]*$"}),
+     option("--depth", "A bounded integer.", {"name": "DEPTH", "type": "integer", "minimum": -8, "maximum": 8}),
+     option("--report", "Where the report goes.", {"name": "FILE", "type": "path"}, requires=["--strict"]),
+     option("--sha", "A sha256.", {"name": "SHA", "type": "sha256", "x-hint": "lowercase"}),
+     option("--signed", "An explicit boolean.", {"name": "FLAG", "type": "boolean"}, "true")],
+    [{"kind": "at-most-one", "options": ["--lenient", "--strict"]},
+     {"kind": "all-or-none", "options": ["--paired-a", "--paired-b"]},
+     {"kind": "exactly-one", "options": ["--digest", "--sum"], "x-note": "one width or the other"},
+     {"kind": "requires", "options": ["--report", "--strict"]}],
+    passthrough=True))
+CATALOG.append(command("serve", ["serve"], "serve", "Hand stdio to a protocol.", "stream",
+                       mode="protocol-stream", protocol="mcp-json-rpc"))
+CATALOG.append(command("tool", ["tool"], "tool -- ARGS...", "Delegate to a child.", "execute",
+                       mode="protocol-stream", external=True, passthrough=True))
+CATALOG.append(command("note.commit", ["note", "commit"], "note commit FILE [--apply]", "Record a commit.",
+                       {"plan": "preview", "apply": "commit", "x-proof": "revision"},
+                       [{"name": "FILE", "required": True, "variadic": False, "summary": "File.", "type": "path"}],
+                       [option("--apply", "Commit.")]))
+CATALOG[-4]["input"]["x-form"] = "exhaustive"
+CATALOG[-4]["x-since"] = "2.4.1"
+
 offline = command("offline", ["offline"], "offline", "Unavailable in this build.", "read")
 offline.update(available=False, unavailableReason="fixture build has no offline backend")
 CATALOG.append(offline)

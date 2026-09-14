@@ -91,7 +91,8 @@ an invocation from `input`, never from help text.
 | `outputSchema` | a JSON Schema of `data` on success |
 | `exitCodes` | exactly `{"0": "command completed", "1": "execution failed", "2": "valid report with violations"}` |
 
-A descriptor MAY carry members whose name starts with `x-`; a generic agent
+A descriptor MAY carry members whose name starts with `x-`, as may every
+other object of a `describe` document (`spec/extensions.md`); a generic agent
 ignores them (see [extensions](extensions.md)). It MUST NOT carry other
 undeclared members.
 
@@ -129,9 +130,17 @@ committed by products do not change.
 
 ### Constraints
 
-`input.constraints` repeats the cross-option rules as entries `{"kind":
+`input.constraints` states the cross-option rules as entries `{"kind":
 ..., "options": [...]}` with `kind` among `requires`, `at-most-one`,
-`exactly-one`, `all-or-none`.
+`exactly-one`, `all-or-none`. An entry's `options` is the whole rule, so two
+all-or-none groups are two entries and no entry needs a name.
+
+An entry MAY restate a rule the options already carry through `requires` or
+`conflictsWith`, or state one they cannot: `exactly-one` has no form at the
+option level, so `input.constraints` is its only site. `all-or-none` is the
+one kind that MUST agree with the options, `group` being its option-level
+form: the options of an `all-or-none` entry are exactly the options sharing
+one `group`, and every `group` of a command has its entry.
 
 ## 3. Value kinds
 

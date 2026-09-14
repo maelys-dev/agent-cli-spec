@@ -16,7 +16,8 @@ spec/agent-cli.md       the normative text
 spec/extensions.md      how a product extends it without bending it
 schemas/*.json          the machine-readable form: describe document, envelope, version, records
 conformance/run.py      the kit: drives a program and reports detected violations
-examples/               maelys-cli's committed contract, as an illustration
+examples/               maelys-cli's committed contract, and reference.describe.json,
+                        one catalog carrying every member the contract allows
 ```
 
 ## Checking a program
