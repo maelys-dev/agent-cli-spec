@@ -35,13 +35,16 @@ checkout at the wanted tag; `maelys-release check DIR` reports drift with exit 2
 
 ## Protecting the default branch
 
-`main` is protected by a repository **ruleset**, not by classic branch
-protection. `maelys-release protect .` computes the contexts the socle's check
-job produces and prints them; it reads and writes classic protection, so it
-cannot apply them here and says so rather than laying a second mechanism over
-the first. Align the ruleset by hand from that list, and do it in the same
-change as an adoption that renames a check: a required context no job reports
-leaves every pull request waiting with green checks.
+`main` is protected by a repository **ruleset**. The contexts it requires are
+derived, never typed: `maelys-release protect .` computes them from the
+socle's check job, and `protect . --apply` writes them into the ruleset.
+
+After an adoption that renames a check, the order is **adopt, merge, then
+`protect . --apply`**. The socle keeps reporting the former names as aliases
+until the protection moves, so the adoption's own pull request passes and the
+branch never requires less; `--apply` replaces each alias by its leg in one
+write, and refuses before the adoption is merged. Never narrow the ruleset to
+get an adoption through.
 
 ## Replaying a tag
 

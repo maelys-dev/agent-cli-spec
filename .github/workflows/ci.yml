@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   check:
-    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@aeb7d28cea778ac49b1fc87992ad963c523c49c3 # v0.51.2
+    uses: maelys-dev/maelys-release/.github/workflows/check-product.yml@4c3ebc3269b4689011bbda4d02a77f8f4b9163b0 # v0.57.0
     with:
       product: agent-cli-spec
       sanitizer_command: ''   # no compiled code here
