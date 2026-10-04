@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.8.0 — 2026-10-05
 
 Five points reported by maelys-cli on moving its pin to 2.7.0, one of them a
 regression of the kit.
@@ -34,6 +34,11 @@ regression of the kit.
 - Section 6 says what it left open: whether options are offered before a `-`
   is typed is the implementation's choice. A script is compared with its own
   `__complete`, never with another implementation's.
+- **A minor, not a patch**: two changes can alter a verdict. A script that
+  fails under a second bash, and a program that offers a hidden or an
+  unavailable identifier after `help` or `describe`, passed the 2.7.1 kit
+  and fail this one. A program that does neither moves its pin and nothing
+  else.
 
 ## 2.7.1 — 2026-10-04
 
