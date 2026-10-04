@@ -201,7 +201,8 @@ class KitTest(unittest.TestCase):
                                  ("text-garbage", "one plain line per record"),
                                  ("pager-in-pipe", "never starts a pager"),
                                  ("field-silent", "does not carry"),
-                                 ("delegate-own-options", "none of the program's own options"),
+                                 ("delegate-format-drift", "the same in every format"),
+                                 ("identifier-unavailable", "no hidden or unavailable identifier"),
                                  ("install-plan-writes", "the plan writes nothing"),
                                  ("install-plan-no-paths", "completion-install.json"),
                                  ("completion-tty-writes", "on a terminal writes nothing"),
@@ -230,13 +231,26 @@ class KitTest(unittest.TestCase):
                                                  " when __complete returns nothing"])
                         self.assertEqual(f"completion {shell}: a script that carries its candidates carries the"
                                          " catalog version" in verdicts, static)
+            # every bash found is driven, the system's included, and each one passes
+            driven = [name for name in verdicts if name.startswith("completion bash") and "offers the words" in name]
+            self.assertTrue(driven and all(verdicts[name] for name in driven), driven)
+
+    def test_a_program_named_by_a_relative_path_is_driven(self) -> None:
+        """2.7.0 lost every check after the completion scripts for `conformance/run.py build/bin/program`,
+        the form the README shows: the scripts are driven from another directory."""
+        completed = subprocess.run([sys.executable, str(KIT), str(FIXTURE.relative_to(ROOT)), "--json"], cwd=ROOT,
+                                   check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertEqual(completed.returncode, 0, completed.stdout[-600:] + completed.stderr)
+        body = json.loads(completed.stdout)
+        self.assertEqual(body["counts"]["failed"], 0)
+        self.assertTrue(any("on a terminal writes nothing" in check["name"] and check["passed"] for check in body["checks"]))
 
     def test_a_missing_shell_is_skipped_not_failed(self) -> None:
         import run as kit_module
         from unittest.mock import patch
         real = shutil.which
         with patch.object(kit_module.shutil, "which", lambda name, *rest: None if name in ("bash", "zsh", "fish")
-                          else real(name, *rest)):
+                          else real(name, *rest)), patch.object(kit_module, "shell_drivers", lambda shell: []):
             report = run_kit(FixtureProgram(shells=True))
         self.assertTrue(report.passed, [check for check in report.checks if check["passed"] is False])
         skipped = [check["name"] for check in report.checks if check["passed"] is None]

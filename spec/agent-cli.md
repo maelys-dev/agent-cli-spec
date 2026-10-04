@@ -324,7 +324,11 @@ detected is the implementation's business, not this contract's. After the
 pattern of a delegate, whose words the catalog does not hold (section 9),
 such a script calls `__complete`. Candidates come from the catalog: command
 words, options not yet given with hidden options excluded, choices; command
-identifiers after `help` and `describe`; never an unavailable command.
+identifiers after `help` and `describe`. A hidden or an unavailable command
+is never offered, as a word or as an identifier: `describe` still answers
+for it, completion does not propose it. Whether options are offered before a
+`-` is typed is the implementation's choice, and a script follows its own
+`__complete` either way.
 
 `completion.install` is reserved. A program MAY offer the installation of
 its completion; one that does declares exactly this, for the reason `--apply`
@@ -443,8 +447,9 @@ verbatim, including `--help`, and owns its exit code.
 
 `__complete` after a delegate's pattern returns the words the delegate's own
 completion returns, the same in every format, or none when it has none or is
-not installed. The program's own options are not among them: the delegate
-receives them verbatim and refuses the rendering ones.
+not installed. The program adds no word of its own to them: what follows the
+pattern is the delegate's command line, and an option there is the
+delegate's, even when it is spelled like one of the program's.
 
 ## 10. Proof of implementation
 

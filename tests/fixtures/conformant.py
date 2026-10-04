@@ -249,7 +249,7 @@ CATALOG
     case "$found" in
         options)
             for word in $longs; do
-                case " ${given[*]} " in *" $word "*) continue ;; esac
+                case "$word" in -*) case " ${given[*]} " in *" $word "*) continue ;; esac ;; esac
                 case "$word" in "$cur"*) COMPREPLY[${#COMPREPLY[@]}]=$word ;; esac
             done ;;
         none) ;;
@@ -286,7 +286,7 @@ _@FN@() {
     case $found in
         options)
             for word in ${=longs}; do
-                (( ${given[(Ie)$word]} )) && continue
+                [[ $word == -* ]] && (( ${given[(Ie)$word]} )) && continue
                 [[ $word == "$cur"* ]] && candidates+=($word)
             done ;;
         none) ;;
@@ -321,7 +321,9 @@ function __@FN@_complete
     switch "$found"
         case options
             for word in $longs
-                contains -- $word $given; and continue
+                if string match -q -- '-*' $word; and contains -- $word $given
+                    continue
+                end
                 string match -q -- "$cur*" $word; and set -a out $word
             end
         case none
@@ -343,6 +345,17 @@ complete -c @PROG@ -f -a '(__@FN@_complete)'
 }
 
 
+def candidate_words(item):
+    """What `__complete` offers after a command's pattern: its visible options, the global ones, and after
+    `help` and `describe` the identifiers of the commands a human can be shown (section 6)."""
+    words = {entry["long"] for entry in item["input"]["options"] if offered(entry)}
+    words |= {entry["long"] for entry in GLOBAL_OPTIONS}
+    if item["id"] in ("help", "describe"):
+        words |= {entry["id"] for entry in CATALOG
+                  if not entry["hidden"] and (entry["available"] or BREAK == "identifier-unavailable")}
+    return words
+
+
 def completion_script(shell):
     """The script of `completion SHELL`: it calls `__complete`, or carries the catalog's candidates."""
     function = PROGRAM.replace("-", "_")
@@ -355,8 +368,7 @@ def completion_script(shell):
     rows = []
     for item in CATALOG:
         kind = "delegate" if item["external"] else "options" if item["available"] else "none"
-        longs = sorted({entry["long"] for entry in item["input"]["options"] if offered(entry)}
-                       | {entry["long"] for entry in GLOBAL_OPTIONS})
+        longs = sorted(candidate_words(item))
         rows.append(f"{len(item['pattern'])}|{kind}|{' '.join(item['pattern'])}|{' '.join(longs)}")
     top = sorted({item["pattern"][0] for item in CATALOG if not item["hidden"] and item["available"]})
     stamp = "" if BREAK == "completion-static-no-version" else f", carrying the candidates of catalog version {VERSION}"
@@ -580,13 +592,12 @@ def main(argv):
         current = operands[-1] if operands else ""
         given = operands[:-1]
         target = next((item for item in CATALOG if given and given[:len(item["pattern"])] == item["pattern"]), None)
-        if target is not None and target["external"] and BREAK != "delegate-own-options":
+        if target is not None and target["external"]:
             # Section 9: after a delegate's pattern the words are the delegate's; this one has none.
             matching = []
         elif target is not None and target["available"]:
-            longs = {item["long"] for item in target["input"]["options"] if offered(item)}
-            longs |= {item["long"] for item in GLOBAL_OPTIONS}
-            matching = sorted(long for long in longs - set(given) if long.startswith(current))
+            matching = sorted(word for word in candidate_words(target)
+                              if word.startswith(current) and not (word.startswith("-") and word in given))
         elif target is not None:
             matching = []
         else:
@@ -597,6 +608,8 @@ def main(argv):
         text = header + record_text(data["records"])
         if BREAK == "text-garbage":
             text = "\x1b[31mgarbage\x1b[0m\n" * len(matching)
+        if BREAK == "delegate-format-drift" and target is not None and target["external"]:
+            text = "a-word-only-text-mode-offers\n"
     else:
         data = {"mode": "apply" if options.get("--apply") else "plan", "changed": False}
         text = f"note: {data['mode']}\n"
