@@ -183,8 +183,10 @@ VERSION = "1.0.0"
 DYNAMIC = {
     "bash": r"""# bash completion for @PROG@
 _@FN@_complete() {
+    local -a words
+    words=("${COMP_WORDS[@]:1:COMP_CWORD}")
     local IFS=$'\n'
-    COMPREPLY=($(@PROG@ __complete -- "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
+    COMPREPLY=($(@PROG@ __complete -- "${words[@]}" 2>/dev/null))
 @STALE@@FALLBACK@}
 complete -o filenames -F _@FN@_complete @PROG@
 """,
@@ -232,8 +234,9 @@ STATIC = {
     "bash": r"""# bash completion for @PROG@@STAMP@
 _@FN@_complete() {
     local IFS=' ' cur="${COMP_WORDS[COMP_CWORD]}" count=$((COMP_CWORD - 1)) n kind pat longs word found=""
-    local -a given
+    local -a given words
     given=("${COMP_WORDS[@]:1:count}")
+    words=("${COMP_WORDS[@]:1:COMP_CWORD}")
     COMPREPLY=()
     while IFS='|' read -r n kind pat longs; do
         [ "$count" -ge "$n" ] || continue
@@ -252,7 +255,7 @@ CATALOG
         none) ;;
         delegate)
             IFS=$'\n'
-            COMPREPLY=($(@PROG@ __complete -- "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null)) ;;
+            COMPREPLY=($(@PROG@ __complete -- "${words[@]}" 2>/dev/null)) ;;
         *)
             for word in @TOP@; do
                 case "$word" in "$cur"*) COMPREPLY[${#COMPREPLY[@]}]=$word ;; esac
