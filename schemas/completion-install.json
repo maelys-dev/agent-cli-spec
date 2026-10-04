@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/maelys-dev/agent-cli-spec/schemas/completion-install.json",
+  "title": "agent-cli/v2 completion.install data",
+  "description": "The plan or the result of `completion install SHELL [--apply]`.",
+  "type": "object",
+  "required": [
+    "mode",
+    "shell",
+    "files",
+    "catalog",
+    "activate"
+  ],
+  "properties": {
+    "mode": {
+      "enum": [
+        "plan",
+        "apply"
+      ]
+    },
+    "shell": {
+      "enum": [
+        "bash",
+        "zsh",
+        "fish"
+      ]
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "kind",
+          "action"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "script",
+              "managed-block"
+            ]
+          },
+          "action": {
+            "enum": [
+              "create",
+              "update",
+              "unchanged"
+            ]
+          }
+        },
+        "patternProperties": {
+          "^x-": {}
+        },
+        "additionalProperties": false
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "patternProperties": {
+        "^x-": {}
+      },
+      "additionalProperties": false
+    },
+    "activate": {
+      "type": "string",
+      "minLength": 1
+    },
+    "changed": {
+      "type": "boolean"
+    }
+  },
+  "patternProperties": {
+    "^x-": {}
+  },
+  "additionalProperties": false
+}

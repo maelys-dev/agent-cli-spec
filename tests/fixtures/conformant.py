@@ -5,7 +5,9 @@
 A fixture for the kit's own tests: a catalog of the built-ins plus one
 transaction, the envelopes, the failures the contract prescribes, the
 completion. CONFORMANT_BREAK names a deliberate defect to inject, so the
-tests can prove that the kit sees it.
+tests can prove that the kit sees it. CONFORMANT_COMPLETION=static makes
+`completion SHELL` print a script that carries its candidates instead of one
+that calls `__complete`.
 """
 from __future__ import annotations
 
@@ -129,6 +131,12 @@ CATALOG.append(command("note.commit", ["note", "commit"], "note commit FILE [--a
 CATALOG[-4]["input"]["x-form"] = "exhaustive"
 CATALOG[-4]["x-since"] = "2.4.1"
 
+CATALOG.append(command("completion.install", ["completion", "install"], "completion install SHELL [--apply]",
+                       "Install the completion script.", {"plan": "preview", "apply": "apply"},
+                       [{"name": "SHELL", "required": True, "variadic": False, "summary": "Shell.", "type": "choice",
+                         "choices": ["bash", "zsh", "fish"]}],
+                       [option("--apply", "Write the script and the startup block.")]))
+
 offline = command("offline", ["offline"], "offline", "Unavailable in this build.", "read")
 offline.update(available=False, unavailableReason="fixture build has no offline backend")
 CATALOG.append(offline)
@@ -167,6 +175,244 @@ def fail(command_id, code, message, fmt, compact):
     else:
         sys.stderr.write(envelope(command_id, False, 1, {"code": code, "message": message, "hint": "read describe."}, compact))
     return 1
+
+
+SHELLS = ("bash", "zsh", "fish")
+VERSION = "1.0.0"
+
+DYNAMIC = {
+    "bash": r"""# bash completion for @PROG@
+_@FN@_complete() {
+    local IFS=$'\n'
+    COMPREPLY=($(@PROG@ __complete -- "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
+@STALE@@FALLBACK@}
+complete -o filenames -F _@FN@_complete @PROG@
+""",
+    "zsh": r"""#compdef @PROG@
+# zsh completion for @PROG@: source it after compinit
+_@FN@() {
+    local -a candidates
+    candidates=("${(@f)$(@PROG@ __complete -- "${(@)words[2,CURRENT]}" 2>/dev/null)}")
+    [[ -n ${candidates[1]} ]] || candidates=()
+@STALE@@FALLBACK@}
+compdef _@FN@ @PROG@
+""",
+    "fish": r"""# fish completion for @PROG@
+function __@FN@_complete
+    set -l tokens (commandline -opc)
+    set -l cur (commandline -ct)
+    set -l out (@PROG@ __complete -- $tokens[2..-1] "$cur" 2>/dev/null)
+@STALE@@FALLBACK@end
+complete -c @PROG@ -f -a '(__@FN@_complete)'
+""",
+}
+STALE = {
+    "bash": "    [ ${#COMPREPLY[@]} -eq 0 ] || COMPREPLY[${#COMPREPLY[@]}]=stale-word\n",
+    "zsh": "    (( ${#candidates} )) && candidates+=(stale-word)\n",
+    "fish": "    test (count $out) -gt 0; and set -a out stale-word\n",
+}
+FALLBACK = {
+    "bash": """    if [ ${#COMPREPLY[@]} -eq 0 ]; then
+        COMPREPLY=($(compgen -f -- "${COMP_WORDS[COMP_CWORD]}"))
+    fi
+""",
+    "zsh": """    if (( ${#candidates} )); then compadd -a candidates; else _files; fi
+""",
+    "fish": """    if test (count $out) -gt 0
+        printf '%s\\n' $out
+    else
+        __fish_complete_path "$cur"
+    end
+""",
+}
+NO_FALLBACK = {"bash": "", "zsh": "    compadd -a candidates\n", "fish": "    printf '%s\\n' $out\n"}
+
+# A script that carries its candidates: one row per command, in catalog order, `words|kind|pattern|options`.
+STATIC = {
+    "bash": r"""# bash completion for @PROG@@STAMP@
+_@FN@_complete() {
+    local IFS=' ' cur="${COMP_WORDS[COMP_CWORD]}" count=$((COMP_CWORD - 1)) n kind pat longs word found=""
+    local -a given
+    given=("${COMP_WORDS[@]:1:count}")
+    COMPREPLY=()
+    while IFS='|' read -r n kind pat longs; do
+        [ "$count" -ge "$n" ] || continue
+        [ "${given[*]:0:n}" = "$pat" ] || continue
+        found=$kind
+        break
+    done <<'CATALOG'
+@ROWS@
+CATALOG
+    case "$found" in
+        options)
+            for word in $longs; do
+                case " ${given[*]} " in *" $word "*) continue ;; esac
+                case "$word" in "$cur"*) COMPREPLY[${#COMPREPLY[@]}]=$word ;; esac
+            done ;;
+        none) ;;
+        delegate)
+            IFS=$'\n'
+            COMPREPLY=($(@PROG@ __complete -- "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null)) ;;
+        *)
+            for word in @TOP@; do
+                case "$word" in "$cur"*) COMPREPLY[${#COMPREPLY[@]}]=$word ;; esac
+            done ;;
+    esac
+    if [ ${#COMPREPLY[@]} -eq 0 ]; then
+        IFS=$'\n'
+        COMPREPLY=($(compgen -f -- "$cur"))
+    fi
+}
+complete -o filenames -F _@FN@_complete @PROG@
+""",
+    "zsh": r"""#compdef @PROG@
+# zsh completion for @PROG@@STAMP@: source it after compinit
+_@FN@() {
+    local cur=${words[CURRENT]} row n kind pat longs word found=
+    local -a given candidates parts
+    given=("${(@)words[2,CURRENT-1]}")
+    for row in @ROWS@; do
+        parts=("${(@s:|:)row}")
+        n=$parts[1]
+        (( ${#given} >= n )) || continue
+        [[ "${(j: :)given[1,n]}" == "$parts[3]" ]] || continue
+        found=$parts[2]
+        longs=$parts[4]
+        break
+    done
+    case $found in
+        options)
+            for word in ${=longs}; do
+                (( ${given[(Ie)$word]} )) && continue
+                [[ $word == "$cur"* ]] && candidates+=($word)
+            done ;;
+        none) ;;
+        delegate)
+            candidates=("${(@f)$(@PROG@ __complete -- "${(@)words[2,CURRENT]}" 2>/dev/null)}")
+            [[ -n ${candidates[1]} ]] || candidates=() ;;
+        *)
+            for word in @TOP@; do
+                [[ $word == "$cur"* ]] && candidates+=($word)
+            done ;;
+    esac
+    if (( ${#candidates} )); then compadd -a candidates; else _files; fi
+}
+compdef _@FN@ @PROG@
+""",
+    "fish": r"""# fish completion for @PROG@@STAMP@
+function __@FN@_complete
+    set -l tokens (commandline -opc)
+    set -l cur (commandline -ct)
+    set -l given $tokens[2..-1]
+    set -l found ""
+    set -l longs
+    set -l out
+    for row in @ROWS@
+        set -l parts (string split -- '|' $row)
+        test (count $given) -ge $parts[1]; or continue
+        test (string join -- ' ' $given[1..$parts[1]]) = "$parts[3]"; or continue
+        set found $parts[2]
+        set longs (string split -- ' ' $parts[4])
+        break
+    end
+    switch "$found"
+        case options
+            for word in $longs
+                contains -- $word $given; and continue
+                string match -q -- "$cur*" $word; and set -a out $word
+            end
+        case none
+        case delegate
+            set out (@PROG@ __complete -- $given "$cur" 2>/dev/null)
+        case '*'
+            for word in @TOP@
+                string match -q -- "$cur*" $word; and set -a out $word
+            end
+    end
+    if test (count $out) -gt 0
+        printf '%s\n' $out
+    else
+        __fish_complete_path "$cur"
+    end
+end
+complete -c @PROG@ -f -a '(__@FN@_complete)'
+""",
+}
+
+
+def completion_script(shell):
+    """The script of `completion SHELL`: it calls `__complete`, or carries the catalog's candidates."""
+    function = PROGRAM.replace("-", "_")
+    static = os.environ.get("CONFORMANT_COMPLETION") == "static" or BREAK == "completion-static-no-version"
+    if not static:
+        text = DYNAMIC[shell]
+        text = text.replace("@STALE@", STALE[shell] if BREAK == "completion-stale-word" else "")
+        text = text.replace("@FALLBACK@", NO_FALLBACK[shell] if BREAK == "completion-no-fallback" else FALLBACK[shell])
+        return text.replace("@PROG@", PROGRAM).replace("@FN@", function)
+    rows = []
+    for item in CATALOG:
+        kind = "delegate" if item["external"] else "options" if item["available"] else "none"
+        longs = sorted({entry["long"] for entry in item["input"]["options"] if offered(entry)}
+                       | {entry["long"] for entry in GLOBAL_OPTIONS})
+        rows.append(f"{len(item['pattern'])}|{kind}|{' '.join(item['pattern'])}|{' '.join(longs)}")
+    top = sorted({item["pattern"][0] for item in CATALOG if not item["hidden"] and item["available"]})
+    stamp = "" if BREAK == "completion-static-no-version" else f", carrying the candidates of catalog version {VERSION}"
+    text = STATIC[shell].replace("@STAMP@", stamp).replace("@TOP@", " ".join(top))
+    text = text.replace("@ROWS@", "\n".join(rows) if shell == "bash" else " ".join(f"'{row}'" for row in rows))
+    return text.replace("@PROG@", PROGRAM).replace("@FN@", function)
+
+
+def install_completion(shell, apply):
+    """`completion install SHELL`: the plan names every path and writes nothing; --apply writes."""
+    home = os.environ.get("HOME") or os.path.expanduser("~")
+    if shell == "fish":
+        config = os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
+        script_path, rc_path = os.path.join(config, "fish", "completions", f"{PROGRAM}.fish"), None
+    else:
+        data_home = os.environ.get("XDG_DATA_HOME") or os.path.join(home, ".local", "share")
+        script_path = os.path.join(data_home, PROGRAM, f"completion.{shell}")
+        rc_path = os.path.join(home, ".bashrc") if shell == "bash" \
+            else os.path.join(os.environ.get("ZDOTDIR") or home, ".zshrc")
+
+    def read(path):
+        try:
+            with open(path, encoding="utf-8") as stream:
+                return stream.read()
+        except OSError:
+            return None
+
+    def write(path, text):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        temporary = f"{path}.{os.getpid()}.tmp"
+        with open(temporary, "w", encoding="utf-8") as stream:
+            stream.write(text)
+        os.replace(temporary, path)
+
+    script = completion_script(shell)
+    current = read(script_path)
+    writes = [(script_path, script, "script", "create" if current is None else "unchanged" if current == script else "update")]
+    if rc_path:
+        begin, end = f"# >>> {PROGRAM} completion >>>\n", f"# <<< {PROGRAM} completion <<<\n"
+        block = begin + f'[ -r "{script_path}" ] && . "{script_path}"\n' + end
+        current = read(rc_path)
+        if current is None:
+            wanted, action = block, "create"
+        elif begin in current and end in current:
+            wanted = current[:current.index(begin)] + block + current[current.index(end) + len(end):]
+            action = "unchanged" if wanted == current else "update"
+        else:
+            wanted, action = current + ("" if not current or current.endswith("\n") else "\n") + block, "update"
+        writes.append((rc_path, wanted, "managed-block", action))
+    if apply or BREAK == "install-plan-writes":
+        for path, text, _kind, action in writes:
+            if action != "unchanged":
+                write(path, text)
+    files = [{"path": path, "kind": kind, "action": action} for path, _text, kind, action in writes]
+    if BREAK == "install-plan-no-paths":
+        files = [{key: value for key, value in entry.items() if key != "path"} for entry in files]
+    return {"mode": "apply" if apply else "plan", "shell": shell, "files": files, "catalog": {"version": VERSION},
+            "activate": f"source {rc_path or script_path}",
+            "changed": bool(apply) and any(action != "unchanged" for _p, _t, _k, action in writes)}
 
 
 def cell(value):
@@ -313,14 +559,28 @@ def main(argv):
             if BREAK == "malformed-catalog":
                 data["commands"] = [{"id": "version", "input": None}]
         text = json.dumps(data, indent=2) + "\n"
-    elif identifier == "completion":
-        data = {"shell": operands[0] if operands else "bash", "script": f"complete -F _c {PROGRAM} # __complete\n"}
-        text = data["script"]
+    elif identifier in ("completion", "completion.install"):
+        shell = operands[0] if operands else ""
+        if shell not in SHELLS:
+            return fail(identifier, "VALIDATION_FAILED", "SHELL is bash, zsh or fish.", fmt, compact)
+        if identifier == "completion":
+            data = {"shell": shell, "script": completion_script(shell)}
+            text = data["script"]
+            if BREAK == "completion-tty-writes" and sys.stdout.isatty():
+                with open(os.path.join(os.environ.get("HOME") or ".", f".{PROGRAM}-completion"), "w") as stream:
+                    stream.write(text)
+        else:
+            data = install_completion(shell, bool(options.get("--apply")))
+            text = "".join(f"{entry.get('action')} {entry.get('path', '')}\n" for entry in data["files"]) \
+                + f"{data['mode']}: {data['activate']}\n"
     elif identifier == "complete.candidates":
         current = operands[-1] if operands else ""
         given = operands[:-1]
         target = next((item for item in CATALOG if given and given[:len(item["pattern"])] == item["pattern"]), None)
-        if target is not None and target["available"]:
+        if target is not None and target["external"] and BREAK != "delegate-own-options":
+            # Section 9: after a delegate's pattern the words are the delegate's; this one has none.
+            matching = []
+        elif target is not None and target["available"]:
             longs = {item["long"] for item in target["input"]["options"] if offered(item)}
             longs |= {item["long"] for item in GLOBAL_OPTIONS}
             matching = sorted(long for long in longs - set(given) if long.startswith(current))

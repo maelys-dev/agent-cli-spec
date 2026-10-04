@@ -184,6 +184,12 @@ exact later action. `--dry-run` and `--plan` MUST be refused with
 `VALIDATION_FAILED` and a hint naming `--apply`: one spelling of the intent
 across products is what the contract exists for.
 
+An effect is declared, so it holds whatever the streams are. A terminal on
+stdout or stderr changes presentation (sections 5 and 7), never whether a
+command writes: a `read` that writes when stdout is a terminal is not a
+`read`, and a program that installs something does it in a transaction the
+user runs.
+
 ## 5. Global options
 
 Every program accepts, on every command:
@@ -295,12 +301,44 @@ a JSON failure envelope from a stream command whose stdout it cannot touch.
 | `describe` | `describe [COMMAND_ID] [--summary] [--prefix PREFIX]` | section 1 |
 | `completion` | `completion bash\|zsh\|fish` | `{"shell": ..., "script": ...}`; text mode prints the script |
 | `complete.candidates` | `__complete -- WORDS...`, hidden, `json-records` | `{"count": N, "records": [{"word": ...}]}` |
+| `completion.install` | `completion install SHELL [--apply]`, reserved: offered or not | `mode`, `shell`, `files`, `catalog`, `activate` |
 
-The completion script calls `PROGRAM __complete -- WORDS...` and falls back to
-the shell's file completion when no candidate is returned. Candidates come
-from the catalog: command words, options not yet given with hidden options
-excluded, choices; command identifiers after `help` and `describe`; never an
-unavailable command.
+`completion SHELL` prints the script and writes nothing; in text mode the
+script alone, so that a shell loads it straight from the command (`source
+<(PROGRAM completion bash)`). The script depends on nothing but its shell,
+the program and its own text. It obtains its candidates from the program, by
+calling `PROGRAM __complete -- WORDS...` at each completion, or from the
+catalog it was generated from, carried in its text; it MAY do both. Either
+way, for every word list it offers the words `PROGRAM __complete -- WORDS...`
+returns, no others, and falls back to the shell's file completion when that
+list is empty: `__complete` is the oracle and the script a rendering of it,
+as `help` is a rendering of `describe`. A description a shell shows beside a
+word is presentation; the words are the contract.
+
+A script that carries its candidates MUST carry the `version` of the catalog
+they come from. It is current while that catalog is unchanged, and whoever
+installs it regenerates it when the program changes; how staleness is
+detected is the implementation's business, not this contract's. After the
+pattern of a delegate, whose words the catalog does not hold (section 9),
+such a script calls `__complete`. Candidates come from the catalog: command
+words, options not yet given with hidden options excluded, choices; command
+identifiers after `help` and `describe`; never an unavailable command.
+
+`completion.install` is reserved. A program MAY offer the installation of
+its completion; one that does declares exactly this, for the reason `--apply`
+has one spelling: pattern `completion install SHELL`, the transaction effect
+`{"plan": "preview", "apply": "apply"}` with `--apply`, `json-envelope`, and
+`data` with `mode`, `shell`, `files` (one entry per file touched: `path`,
+`kind` `script` or `managed-block`, `action` `create`, `update` or
+`unchanged`), `catalog` (its `version`, and the implementation's `digest` if
+it keeps one) and `activate`, the exact command that loads the completion in
+the current session. The plan names every path and writes nothing, as
+section 4 requires; `--apply` writes the script, adds or replaces one
+identified block in the shell's startup file where the shell needs one, and
+leaves the rest of that file as it was. A program that declares nothing of
+this installs nothing: packaged programs install their completion through
+their package. An agent checks that the catalog declares
+`completion.install` before invoking it.
 
 ## 7. Envelopes
 
@@ -400,6 +438,11 @@ never inject banners, progress or JSON into their stdout, and declare
 identifies it through `protocol`; a command merely relaying a child's stdio
 declares none, as section 2 says. A delegate receives every argument after its pattern
 verbatim, including `--help`, and owns its exit code.
+
+`__complete` after a delegate's pattern returns the words the delegate's own
+completion returns, the same in every format, or none when it has none or is
+not installed. The program's own options are not among them: the delegate
+receives them verbatim and refuses the rendering ones.
 
 ## 10. Proof of implementation
 

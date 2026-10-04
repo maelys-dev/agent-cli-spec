@@ -20,17 +20,20 @@ import os
 import pathlib
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from validate import json_equal, unsupported_keywords, validate  # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 SCHEMAS = {name: json.loads((HERE.parent / "schemas" / f"{name}.json").read_text(encoding="utf-8"))
-           for name in ("describe", "envelope", "version", "records")}
+           for name in ("describe", "envelope", "version", "records", "completion-install")}
+SHELLS = ("bash", "zsh", "fish")
 GLOBAL_OPTIONS = {
     "--format": {"name": "VALUE", "type": "choice", "choices": ["text", "json", "jsonl"]},
     "--json": None, "--compact": None, "--pretty": None, "--non-interactive": None, "--verbose": None,
@@ -358,6 +361,328 @@ def check_hidden_options(report: Report, program: Program, command: dict) -> Non
                    accepted_body["ok"] or code != "VALIDATION_FAILED", f"exit {accepted.returncode} {code}")
 
 
+# ---- completion scripts, driven in their own shell ----
+# The oracle is `__complete`; a script is a rendering of it (section 6). Each shell is driven without a
+# terminal of the user's: bash by calling the completion function, fish through `complete --do-complete`,
+# zsh through its own pseudo-terminal module. A shell that is not installed is skipped, never failed.
+
+BASH_HARNESS = r"""
+source "$1" || exit 3
+compopt() { :; }
+program=$2
+spec=$(complete -p "$program" 2>/dev/null) || exit 4
+case "$spec" in *" -F "*) ;; *) exit 4 ;; esac
+fn=${spec##* -F }
+fn=${fn%% *}
+printf '<<SPEC>>%s\n' "$spec"
+run() {
+    COMP_WORDS=("${words[@]}")
+    COMP_CWORD=$(( ${#words[@]} - 1 ))
+    COMP_LINE="${words[*]}"
+    COMP_POINT=${#COMP_LINE}
+    COMP_TYPE=9
+    COMP_KEY=9
+    COMPREPLY=()
+    "$fn" "$program" "${words[COMP_CWORD]}" "${words[COMP_CWORD-1]}"
+    printf '<<KIT>>\n'
+    for reply in "${COMPREPLY[@]}"; do printf '%s\n' "$reply"; done
+    printf '<<END>>\n'
+}
+words=("$program")
+while IFS= read -r line || [ -n "$line" ]; do
+    if [ "$line" = "<<RUN>>" ]; then
+        run
+        words=("$program")
+    else
+        words[${#words[@]}]="${line#=}"
+    fi
+done < "$3"
+"""
+
+ZSH_HARNESS = r"""
+zmodload zsh/zpty || exit 3
+script=$1 program=$2 cases=$3
+zpty z 'TERM=dumb zsh -f -i' || exit 3
+zpty -w z 'PS1=""; unsetopt zle_bracketed_paste 2>/dev/null; autoload -Uz compinit; compinit -u -D; source '"${(q)script}"
+zpty -w z 'compadd() { local a; for a in "$@"; do case $a in (-[OAD]*) builtin compadd "$@"; return ;; (--) break ;; esac; done; local -a __one; builtin compadd -O __one "$@"; local r=$?; __kit+=("${__one[@]}"); return r }'
+zpty -w z '_kit() { typeset -ga __kit; __kit=(); _main_complete; print -r -- "<<KI""T>>"; print -rl -- $__kit; print -r -- "<<EN""D>>" }'
+zpty -w z 'zle -C _kitw complete-word _kit; bindkey "^B" _kitw; bindkey "^U" kill-whole-line'
+zpty -w z 'print REA""DY'
+zpty -r z out '*READY*'
+while IFS= read -r line; do
+    zpty -n -w z "$program $line"$'\C-B'
+    zpty -r z out '*<<END>>*'
+    print -r -- "<<CASE>>"
+    print -r -- "$out"
+    zpty -n -w z $'\C-U'
+done < $cases
+zpty -d z
+"""
+
+FISH_COMMAND = "source $argv[1]; complete --do-complete=$argv[2]"
+
+
+def run_harness(argv: list[str], env: dict, cwd: str, timeout: float) -> subprocess.CompletedProcess | None:
+    """Run a shell harness; None when it does not answer in time."""
+    with subprocess.Popen(argv, env=env, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, start_new_session=os.name == "posix") as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            if os.name == "posix":
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                process.kill()
+            try:
+                process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.stdout.close()
+                process.stderr.close()
+                process.wait()
+            return None
+    return subprocess.CompletedProcess(argv, process.returncode, stdout.decode("utf-8", "replace"),
+                                       stderr.decode("utf-8", "replace"))
+
+
+def between(text: str, start: str, end: str) -> list[list[str]]:
+    """The non-empty lines of every `start` ... `end` section of a harness output."""
+    sections = []
+    for chunk in text.split(start)[1:]:
+        body = chunk.split(end)[0]
+        sections.append([line.strip("\r") for line in body.splitlines() if line.strip("\r") != ""])
+    return sections
+
+
+def shell_candidates(shell: str, script: str, name: str, cases: list[list[str]], env: dict, work: pathlib.Path,
+                     timeout: float) -> tuple[list[list[str]] | None, str]:
+    """What the script offers for each word list, and a note: the bash spec, or why the shell was not driven."""
+    path = work / f"completion.{shell}"
+    path.write_text(script, encoding="utf-8")
+    lines = [" ".join(words) for words in cases]
+    cwd = str(work / "files")
+    if shell == "bash":
+        (work / "bash.cases").write_text("".join("".join(f"={word}\n" for word in words) + "<<RUN>>\n" for words in cases),
+                                         encoding="utf-8")
+        (work / "harness.bash").write_text(BASH_HARNESS, encoding="utf-8")
+        done = run_harness(["bash", "--noprofile", "--norc", str(work / "harness.bash"), str(path), name,
+                            str(work / "bash.cases")], env, cwd, timeout)
+        if done is None:
+            return None, "the bash harness did not answer"
+        if done.returncode == 4:
+            return None, "the script registers no `complete -F` function for the program, the one shape the kit drives"
+        if done.returncode != 0:
+            return None, f"the script could not be sourced by bash --norc: {done.stderr.strip()[:160]}"
+        return between(done.stdout, "<<KIT>>\n", "<<END>>"), done.stdout.split("<<SPEC>>", 1)[-1].split("\n", 1)[0]
+    if shell == "zsh":
+        (work / "zsh.cases").write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+        (work / "harness.zsh").write_text(ZSH_HARNESS, encoding="utf-8")
+        done = run_harness(["zsh", "-f", str(work / "harness.zsh"), str(path), name, str(work / "zsh.cases")],
+                           env, cwd, timeout)
+        if done is None:
+            return None, "the zsh harness did not answer"
+        if done.returncode != 0:
+            return None, f"zsh could not be driven through zsh/zpty: {done.stderr.strip()[:160]}"
+        sections = []
+        for chunk in done.stdout.split("<<CASE>>")[1:]:
+            found = between(chunk, "<<KIT>>", "<<END>>")
+            sections.append(found[-1] if found else [])
+        return sections, ""
+    answers = []
+    for line in lines:
+        done = run_harness(["fish", "--no-config", "-c", FISH_COMMAND, str(path), f"{name} {line}"], env, cwd, timeout)
+        if done is None:
+            return None, "fish did not answer"
+        if done.returncode != 0 and not done.stdout:
+            return None, f"fish could not be driven: {done.stderr.strip()[:160]}"
+        answers.append([entry.split("\t", 1)[0] for entry in done.stdout.splitlines() if entry])
+    return answers, ""
+
+
+def run_on_terminal(argv: list[str], env: dict, cwd: str, timeout: float) -> tuple[int, str] | None:
+    """Run with stdout on a pseudo-terminal; None where there is none, or when the program does not finish."""
+    if os.name != "posix":
+        return None
+    import pty
+    import select
+    master, slave = pty.openpty()
+    chunks: list[bytes] = []
+    try:
+        with subprocess.Popen(argv, env=env, cwd=cwd, stdin=subprocess.DEVNULL, stdout=slave,
+                              stderr=subprocess.DEVNULL, start_new_session=True) as process:
+            deadline = time.monotonic() + timeout
+            while True:
+                if select.select([master], [], [], 0.05)[0]:
+                    try:
+                        data = os.read(master, 65536)
+                    except OSError:
+                        break
+                    if not data:
+                        break
+                    chunks.append(data)
+                elif process.poll() is not None:
+                    break
+                elif time.monotonic() > deadline:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait()
+                    return None
+        return process.returncode, b"".join(chunks).decode("utf-8", "replace").replace("\r\n", "\n")
+    finally:
+        os.close(slave)
+        os.close(master)
+
+
+def tree(root: pathlib.Path) -> set[str]:
+    return {str(path.relative_to(root)) for path in root.rglob("*")}
+
+
+def check_completion_scripts(report: Report, program: Program, catalog: dict, commands: list[dict],
+                             scripts: dict[str, str]) -> None:
+    """Section 6: a script offers the words `__complete` returns, falls back to files, writes nothing."""
+    name = str(catalog.get("program", ""))
+    command = getattr(program, "command", None)
+    if os.name != "posix" or not command or not name or "/" in name:
+        for shell in scripts:
+            report.skip(f"completion {shell}: the script is driven in its shell",
+                        "the kit drives completion scripts on POSIX, for a program it can launch by its name")
+        return
+    timeout = float(getattr(program, "timeout", 10))
+    plain = [item for item in commands if item["available"] and not item["hidden"] and not item["external"]]
+    cases = [[""]] + [[*item["pattern"], ""] for item in plain[:6]] + [["help", ""], ["describe", ""]]
+    if plain:
+        cases += [[plain[0]["pattern"][0][:2]], [*plain[0]["pattern"], "zz-kit-"]]
+    cases = [words for index, words in enumerate(cases) if words not in cases[:index]]
+    oracle = []
+    for words in cases:
+        answer = program.run("__complete", "--format", "json", "--non-interactive", "--", *words)
+        try:
+            oracle.append([str(record["word"]) for record in parse_json(answer.stdout)["data"]["records"]])
+        except (ValueError, KeyError, TypeError, RecursionError):
+            oracle.append(None)
+    with tempfile.TemporaryDirectory(prefix="agent-cli-completion-") as directory:
+        work = pathlib.Path(directory)
+        for part in ("bin", "files", "home"):
+            (work / part).mkdir()
+        fallback = ["zz-kit-alpha.txt", "zz-kit-beta.txt"]
+        for entry in fallback:
+            (work / "files" / entry).write_text("", encoding="utf-8")
+        log = work / "launches.log"
+        resolved = [shutil.which(command[0]) or command[0]] + [
+            str(pathlib.Path(word).resolve()) if not word.startswith("-") and pathlib.Path(word).exists() else word
+            for word in command[1:]]
+        wrapper = work / "bin" / name
+        wrapper.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {shlex.quote(str(log))}\nexec {shlex.join(resolved)} \"$@\"\n",
+                           encoding="utf-8")
+        wrapper.chmod(0o755)
+        base = {**os.environ, **getattr(program, "env", {})}
+        env = {**base, "PATH": str(work / "bin") + os.pathsep + base.get("PATH", ""), "HOME": str(work / "home"),
+               "XDG_CONFIG_HOME": str(work / "home" / ".config"), "XDG_DATA_HOME": str(work / "home" / ".local" / "share"),
+               "ZDOTDIR": str(work / "home"), "TERM": "dumb"}
+        for shell, script in scripts.items():
+            # ---- a terminal never changes an effect (section 4) ----
+            home = work / f"terminal-home-{shell}"
+            home.mkdir()
+            before = tree(home)
+            terminal_env = {**env, "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"),
+                            "XDG_DATA_HOME": str(home / ".local" / "share"), "ZDOTDIR": str(home)}
+            piped = program.run("completion", shell, "--pager", "never")
+            shown = run_on_terminal([*resolved, "completion", shell, "--pager", "never"], terminal_env,
+                                    str(work / "files"), timeout)
+            if shown is None:
+                report.skip(f"completion {shell} on a terminal writes nothing", "the program did not finish on a pseudo-terminal")
+            else:
+                written = sorted(tree(home) - before)
+                report.add(f"completion {shell} on a terminal writes nothing", not written, f"wrote {written[:4]}")
+                report.add(f"completion {shell} on a terminal prints the script it prints into a pipe",
+                           shown[0] == 0 and shown[1] == piped.stdout, f"exit {shown[0]}, {shown[1][:80]!r}")
+            # ---- the script in its shell ----
+            check = f"completion {shell}: the script offers the words of __complete"
+            if shutil.which(shell) is None:
+                report.skip(check, f"{shell} is not installed")
+                continue
+            launched = len(log.read_text(encoding="utf-8").splitlines()) if log.exists() else 0
+            answers, note = shell_candidates(shell, script, name, cases, env, work, max(30.0, timeout * (len(cases) + 2)))
+            if answers is None or len(answers) != len(cases):
+                report.skip(check, note or f"the {shell} harness answered {len(answers or [])} of {len(cases)} cases")
+                continue
+            launches = (len(log.read_text(encoding="utf-8").splitlines()) if log.exists() else 0) - launched
+            differing, compared, unanswered = [], 0, []
+            for words, expected, offered in zip(cases, oracle, answers):
+                if expected is None:
+                    continue
+                if expected:
+                    compared += 1
+                    if set(offered) != set(expected):
+                        differing.append(f"{' '.join(words)!r}: only the script {sorted(set(offered) - set(expected))[:4]},"
+                                         f" only __complete {sorted(set(expected) - set(offered))[:4]}")
+                elif not (set(fallback) <= set(offered) or shell == "bash" and not offered
+                          and re.search(r" -o (default|bashdefault) ", note + " ")):
+                    unanswered.append(f"{' '.join(words)!r}: script {sorted(offered)[:6]}")
+            report.add(check, not differing and compared > 0,
+                       "; ".join(differing[:3]) or f"{compared} word lists compared, {launches} launches of the program")
+            if any(expected == [] for expected in oracle):
+                report.add(f"completion {shell}: the script falls back to file completion when __complete returns nothing",
+                           not unanswered, "; ".join(unanswered[:3]))
+            if not differing and compared > 0 and launches == 0:
+                carried = str(catalog.get("version", "")) != "" and str(catalog.get("version")) in script
+                report.add(f"completion {shell}: a script that carries its candidates carries the catalog version",
+                           carried, "" if carried else f"version {catalog.get('version')!r} is not in the script")
+
+
+def check_delegate_completion(report: Report, program: Program, catalog: dict, commands: list[dict]) -> None:
+    """Section 9: after a delegate's pattern the words are the delegate's, the same in every format."""
+    own = {item.get("long") for item in catalog.get("globalOptions", [])}
+    for command in commands:
+        if not command["external"] or not command["available"]:
+            continue
+        identifier = command["id"]
+        answer = program.run("__complete", "--format", "json", "--non-interactive", "--", *command["pattern"], "")
+        body = envelope(report, f"{identifier}: __complete after a delegate's pattern", answer, expect_ok=True)
+        if body is None:
+            continue
+        records = body["data"]["records"]
+        words = {record.get("word") for record in records}
+        report.add(f"{identifier}: __complete after a delegate's pattern offers none of the program's own options",
+                   not words & own, f"offered {sorted(words & own)[:6]}")
+        text = program.run("__complete", "--format", "text", "--non-interactive", "--", *command["pattern"], "")
+        report.add(f"{identifier}: __complete after a delegate's pattern is the same in every format",
+                   text.returncode == 0 and text.stdout == text_records(records),
+                   f"text {text.stdout[:80]!r}, json {sorted(words)[:6]}")
+
+
+def check_completion_install(report: Report, program: Program, by_id: dict) -> None:
+    """Section 6: the reserved installation, where a catalog declares it. The plan is run, never --apply."""
+    command = by_id.get("completion.install")
+    if command is None:
+        return
+    effect = command["effect"] if isinstance(command["effect"], dict) else {}
+    report.add("completion.install has the reserved shape",
+               command["pattern"] == ["completion", "install"] and effect.get("plan") == "preview"
+               and effect.get("apply") == "apply" and command["outputMode"] == "json-envelope",
+               f"pattern {command['pattern']}, effect {command['effect']}, outputMode {command['outputMode']}")
+    with tempfile.TemporaryDirectory(prefix="agent-cli-install-") as directory:
+        for shell in SHELLS:
+            home = pathlib.Path(directory) / shell
+            home.mkdir()
+            env = {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"),
+                   "XDG_DATA_HOME": str(home / ".local" / "share"), "ZDOTDIR": str(home)}
+            plan = program.run("completion", "install", shell, "--format", "json", "--non-interactive", env=env)
+            body = envelope(report, f"completion install {shell}: the plan", plan, expect_ok=True)
+            written = sorted(tree(home))
+            report.add(f"completion install {shell}: the plan writes nothing", not written, f"wrote {written[:4]}")
+            if body is None:
+                continue
+            issues = validate(body["data"], SCHEMAS["completion-install"])
+            report.add(f"completion install {shell}: the plan matches schemas/completion-install.json",
+                       not issues and body["data"].get("mode") == "plan" and body["data"].get("shell") == shell,
+                       issues_text(issues) or f"mode {body['data'].get('mode')!r}, shell {body['data'].get('shell')!r}")
+
+
 def trunk_shape(item: dict, expected: dict | None) -> bool:
     """An option has a trunk option's shape: a flag, or the same value type and choices; never repeatable."""
     if item.get("repeatable") is not False:
@@ -662,10 +987,15 @@ def _run_kit(program: Program, report: Report) -> Report:
                text.returncode == 1 and text.stdout == "" and text.stderr.startswith(f"{catalog.get('program')}: [INVALID_COMMAND] "),
                text.stderr[:120])
     # ---- completion ----
-    for shell in ("bash", "zsh", "fish"):
+    scripts = {}
+    for shell in SHELLS:
         script = program.run("completion", shell)
-        report.add(f"completion {shell} prints a script calling __complete",
-                   script.returncode == 0 and "__complete" in script.stdout)
+        if report.add(f"completion {shell} prints a script", script.returncode == 0 and script.stdout.strip() != ""
+                      and script.stderr == "", f"exit {script.returncode}, stderr {script.stderr[:80]!r}"):
+            scripts[shell] = script.stdout
+    check_completion_scripts(report, program, catalog, commands, scripts)
+    check_delegate_completion(report, program, catalog, commands)
+    check_completion_install(report, program, by_id)
     body = candidate_body
     if body is not None:
         issues = validate(body["data"], SCHEMAS["records"])
@@ -734,7 +1064,12 @@ def main(argv: list[str]) -> int:
                                         "terminal rendering (tested separately by implementations)",
                                         "declarations the program never emits: a kit sees what a program chooses "
                                         "to show, so a framework checks its own output over every declaration "
-                                        "it offers"]}}
+                                        "it offers",
+                                        "completion in a shell that is not installed (skipped per shell), and a "
+                                        "bash script registered otherwise than by `complete -F`",
+                                        "completion after a delegate's pattern inside a shell",
+                                        "whether an installed completion script is stale after an upgrade",
+                                        "the writes of `completion install --apply`: the kit runs the plan only"]}}
     if report_path:
         try:
             report_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")

@@ -815,6 +815,60 @@
       }
     },
     {
+      "id": "completion.install",
+      "pattern": [
+        "completion",
+        "install"
+      ],
+      "usage": "completion install SHELL [--apply]",
+      "purpose": "Install the completion script.",
+      "effect": {
+        "plan": "preview",
+        "apply": "apply"
+      },
+      "outputMode": "json-envelope",
+      "external": false,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "completion install SHELL [--apply]",
+        "operands": [
+          {
+            "name": "SHELL",
+            "required": true,
+            "variadic": false,
+            "summary": "Shell.",
+            "type": "choice",
+            "choices": [
+              "bash",
+              "zsh",
+              "fish"
+            ]
+          }
+        ],
+        "options": [
+          {
+            "long": "--apply",
+            "required": false,
+            "repeatable": false,
+            "summary": "Write the script and the startup block.",
+            "requires": [],
+            "conflictsWith": []
+          }
+        ],
+        "constraints": [],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      }
+    },
+    {
       "id": "offline",
       "pattern": [
         "offline"
