@@ -6,9 +6,10 @@ program answers `describe` with it, success is one JSON envelope on stdout,
 failure one on stderr, and the exit code says whether the work completed,
 failed, or validated something that turned out invalid.
 
-The contract was born in Hermes (TypeScript), was made a framework by
-maelys-cli (C, `libmaelys_cli`) and is implemented again by maelys-release
-(Python). This repository is the one place where it is written down, in a
+The contract was born in Hermes (TypeScript) and was made a framework by
+maelys-cli, as a C library (`libmaelys_cli`) and as a Python module
+(`maelys_cli.py`) on which products such as maelys-release are built. This
+repository is the one place where it is written down, in a
 form that any language can be checked against:
 
 ```text

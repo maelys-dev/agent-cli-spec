@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- The sentence naming the implementations, in section 0 and in the README,
+  said the Python implementation was `maelys-release`. It is maelys-cli's
+  Python module, `maelys_cli.py`, the counterpart of `libmaelys_cli`;
+  `maelys-release` is a product built on it. Hermes is unchanged: it is
+  TypeScript, as the text said. No requirement changes, and nothing is
+  released for this alone: it travels in the next tag.
+
 ## 2.7.0 — 2026-10-04
 
 - Section 6: a completion script may carry its candidates instead of calling

@@ -10,7 +10,9 @@ validated something that turned out invalid.
 This document is normative. Its identifier is `agent-cli/v2`, carried by
 every envelope. The words MUST, MUST NOT, SHOULD and MAY are used as in
 RFC 2119. Implementations exist in TypeScript (Hermes, where the contract
-was born), C (`libmaelys_cli`, the framework) and Python (`maelys-release`);
+was born) and in maelys-cli, the framework, as a C library (`libmaelys_cli`)
+and as a Python module (`maelys_cli.py`) on which products such as
+`maelys-release` are built;
 the [conformance kit](../conformance/run.py) checks any of them from the
 outside, and the [schemas](../schemas/) are the machine-readable form of
 what follows.
