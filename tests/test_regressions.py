@@ -175,6 +175,29 @@ class KitRegressionTest(unittest.TestCase):
                 self.assertEqual(fixture.field_text(value), text)
                 self.assertEqual(field_jsonl(value), lines)
 
+    def test_fixture_installs_its_completion_once_and_leaves_the_rest(self):
+        """Section 6: --apply adds or replaces one identified block and leaves the rest of the file as it was."""
+        with tempfile.TemporaryDirectory(prefix="agent cli install ") as directory:
+            home = pathlib.Path(directory)
+            (home / ".bashrc").write_text("export EDITOR=vi\n", encoding="utf-8")
+            env = {"HOME": str(home), "XDG_DATA_HOME": "", "XDG_CONFIG_HOME": "", "ZDOTDIR": ""}
+            program = FixtureProgram()
+            plan = json.loads(program.run("completion", "install", "bash", "--json", env=env).stdout)["data"]
+            self.assertEqual([entry["action"] for entry in plan["files"]], ["create", "update"])
+            self.assertEqual(sorted(path.name for path in home.iterdir()), [".bashrc"])
+            self.assertFalse(validate(plan, SCHEMAS["completion-install"]))
+            first = json.loads(program.run("completion", "install", "bash", "--apply", "--json", env=env).stdout)["data"]
+            self.assertTrue(first["changed"])
+            written = (home / ".bashrc").read_text(encoding="utf-8")
+            self.assertTrue(written.startswith("export EDITOR=vi\n"))
+            again = json.loads(program.run("completion", "install", "bash", "--apply", "--json", env=env).stdout)["data"]
+            self.assertEqual([entry["action"] for entry in again["files"]], ["unchanged", "unchanged"])
+            self.assertFalse(again["changed"])
+            self.assertEqual((home / ".bashrc").read_text(encoding="utf-8"), written)
+            self.assertEqual(written.count("conformant completion >>>"), 1)
+            self.assertEqual(pathlib.Path(first["files"][0]["path"]).read_text(encoding="utf-8"),
+                             program.run("completion", "bash").stdout)
+
     def test_jsonl_compares_records_and_types_not_only_line_count(self):
         for output in ('{"word":"other"}\n', 'garbage\n', 'true\n', '{"word":"a"}\n\n'):
             report = Report()

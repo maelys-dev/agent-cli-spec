@@ -15,8 +15,15 @@ FIXTURE = ROOT / "tests" / "fixtures" / "conformant.py"
 
 
 class FixtureProgram:
-    def __init__(self, defect="", transform=None):
-        self.env = {"NO_COLOR": "1", "PAGER": "", "CONFORMANT_BREAK": defect}
+    """The fixture in memory. Without a `command` the kit skips what needs a real process, the
+    completion scripts driven in their shells; `shells=True` names one, at the cost of seconds."""
+
+    def __init__(self, defect="", transform=None, shells=False, static=False):
+        self.env = {"NO_COLOR": "1", "PAGER": "", "CONFORMANT_BREAK": defect,
+                    "CONFORMANT_COMPLETION": "static" if static else ""}
+        if shells:
+            self.command = [sys.executable, str(FIXTURE)]
+            self.timeout = 10
         self.failures = []
         self.transform = transform
         spec = importlib.util.spec_from_file_location("fixture", FIXTURE)

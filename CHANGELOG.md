@@ -1,5 +1,67 @@
 # Changelog
 
+## 2.7.0 — 2026-10-04
+
+- Section 6: a completion script may carry its candidates instead of calling
+  the program at each completion. The text said the script "calls `PROGRAM
+  __complete`", and the kit looked for those characters in it, which a
+  comment satisfied and which proved nothing about what a Tab offers. The
+  rule is now behavioral: for every word list a script offers the words
+  `__complete` returns, no others, and falls back to the shell's file
+  completion when that list is empty. `__complete` is the oracle and the
+  script a rendering of it, dynamic or static. A script that carries its
+  candidates MUST carry the `version` of the catalog they come from, and
+  calls `__complete` after a delegate's pattern, whose words no catalog
+  holds. Decision: the gain is a Python program's start-up at each Tab, a
+  compiled one answers fast, so static is permitted and never required. Not
+  in the contract, on purpose: caches, file dates, catalog digests, the
+  number of processes per Tab. How staleness is detected is the
+  implementation's business; a rule on file dates fails under Nix, Homebrew
+  bottles, pip launchers and downgrades.
+- Section 4: a terminal never changes an effect. It changes presentation,
+  never whether a command writes; a `read` that writes when stdout is a
+  terminal is not a `read`. This was a consequence of the effects table that
+  no sentence spelled out and no check could see, the kit running without a
+  terminal. Reported with a product that installed its completion when its
+  `completion` command met a terminal.
+- `completion.install` is reserved: `completion install SHELL [--apply]`, a
+  transaction whose plan names every file and writes nothing. A program
+  offers it or not; one that does declares exactly this shape, for the
+  reason `--apply` has one spelling. `schemas/completion-install.json` gives
+  its `data`. Decision: installation is not mandatory, writing into a
+  startup file is intrusive and packaged programs install their completion
+  through their package; but two products spelling it two ways is what the
+  contract exists to prevent. `spec/extensions.md` says a product MUST NOT
+  declare another command for the same intent.
+- Section 9: `__complete` after a delegate's pattern returns the delegate's
+  words, the same in every format, or none, and never the program's own
+  options. The two reference implementations disagreed: one forwarded to the
+  delegate in text mode and returned nothing in JSON, the other offered the
+  global options a delegate refuses.
+- The kit drives the script in each of bash, zsh and fish that is installed
+  and compares it with `__complete`; an absent shell is `SKIP`. It runs
+  `completion SHELL` on a pseudo-terminal in an empty home and checks that
+  nothing is written and the same script is printed. Where a catalog
+  declares `completion.install` it checks the shape, runs the plan in an
+  empty home and checks that nothing is written; it never passes `--apply`.
+  The fixture prints real scripts for the three shells, dynamic or carrying
+  their candidates, and seven defects prove the checks fail.
+- **This is a minor and not a patch**: a program conformant to 2.6.0 fails
+  this kit when its script has no file fallback in a shell, when its
+  `completion` writes on a terminal, or when `__complete` after a delegate's
+  pattern offers its own options or differs between formats.
+- Adopts maelys-release v0.62.3: two pinned workflows, nothing asked of this
+  repository. `dependencies/packages` declares zsh and fish for the Linux
+  runners, so the tests exercise the three shells.
+
+Migration: whoever writes the trunk keeps its completion scripts, provided
+each falls back to file completion in its shell, `completion` writes nothing
+on a terminal, and `__complete` after a delegate's pattern returns the same
+records in every format without the program's own options. A static script
+and `completion install` are declared as section 6 says by an implementation
+that offers them. A product built on a framework declares nothing of this
+and moves with its framework's release (section 11).
+
 ## 2.6.0 — 2026-09-14
 
 - An operand may declare `algorithms`, `digits` and `pattern`, which only an

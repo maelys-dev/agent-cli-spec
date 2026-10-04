@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import unittest
@@ -199,12 +200,47 @@ class KitTest(unittest.TestCase):
                                  ("malformed-jsonl", "records"),
                                  ("text-garbage", "one plain line per record"),
                                  ("pager-in-pipe", "never starts a pager"),
-                                 ("field-silent", "does not carry")):
+                                 ("field-silent", "does not carry"),
+                                 ("delegate-own-options", "none of the program's own options"),
+                                 ("install-plan-writes", "the plan writes nothing"),
+                                 ("install-plan-no-paths", "completion-install.json"),
+                                 ("completion-tty-writes", "on a terminal writes nothing"),
+                                 ("completion-stale-word", "offers the words of __complete"),
+                                 ("completion-no-fallback", "falls back to file completion"),
+                                 ("completion-static-no-version", "carries the catalog version")):
             with self.subTest(defect=defect):
-                report = run_kit(FixtureProgram(defect))
+                report = run_kit(FixtureProgram(defect, shells=defect.startswith("completion-")))
                 self.assertFalse(report.passed)
                 failed = [check["name"] for check in report.checks if check["passed"] is False]
                 self.assertTrue(any(expected in name for name in failed), failed)
+
+    def test_completion_scripts_are_driven_in_every_installed_shell(self) -> None:
+        """A shell that is installed is driven, never skipped: a harness that stops working fails here."""
+        for static in (False, True):
+            report = run_kit(FixtureProgram(shells=True, static=static))
+            self.assertTrue(report.passed, [check for check in report.checks if check["passed"] is False])
+            verdicts = {check["name"]: check["passed"] for check in report.checks}
+            for shell in ("bash", "zsh", "fish"):
+                with self.subTest(shell=shell, static=static):
+                    installed = shutil.which(shell) is not None
+                    self.assertIs(verdicts[f"completion {shell}: the script offers the words of __complete"],
+                                  True if installed else None)
+                    if installed:
+                        self.assertTrue(verdicts[f"completion {shell}: the script falls back to file completion"
+                                                 " when __complete returns nothing"])
+                        self.assertEqual(f"completion {shell}: a script that carries its candidates carries the"
+                                         " catalog version" in verdicts, static)
+
+    def test_a_missing_shell_is_skipped_not_failed(self) -> None:
+        import run as kit_module
+        from unittest.mock import patch
+        real = shutil.which
+        with patch.object(kit_module.shutil, "which", lambda name, *rest: None if name in ("bash", "zsh", "fish")
+                          else real(name, *rest)):
+            report = run_kit(FixtureProgram(shells=True))
+        self.assertTrue(report.passed, [check for check in report.checks if check["passed"] is False])
+        skipped = [check["name"] for check in report.checks if check["passed"] is None]
+        self.assertEqual(len([name for name in skipped if "offers the words of __complete" in name]), 3)
 
     def test_unrunnable_program(self) -> None:
         self.assertEqual(kit("/nonexistent/program").returncode, 2)

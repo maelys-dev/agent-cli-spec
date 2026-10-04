@@ -14,7 +14,8 @@ form that any language can be checked against:
 ```text
 spec/agent-cli.md       the normative text
 spec/extensions.md      how a product extends it without bending it
-schemas/*.json          the machine-readable form: describe document, envelope, version, records
+schemas/*.json          the machine-readable form: describe document, envelope, version, records,
+                        completion install
 conformance/run.py      the kit: drives a program and reports detected violations
 examples/               maelys-cli's committed contract, and reference.describe.json,
                         one catalog carrying every member the contract allows
@@ -38,8 +39,11 @@ PROGRAM describe --summary --prefix content --format json
 This returns the compact descriptors whose identifier is `content` or starts
 with `content.`. Use `describe COMMAND_ID` afterwards for one full descriptor.
 
-The kit needs `python3` and nothing else. It only runs read commands and
-invocations the contract says must be refused; it never passes `--apply`.
+The kit needs `python3` and nothing else. It only runs read commands, plans
+and invocations the contract says must be refused; it never passes `--apply`.
+It drives the completion script in each of `bash`, `zsh` and `fish` that is
+installed, comparing what the script offers with what `__complete` returns;
+a shell that is absent is reported `SKIP`, never as a failure.
 Each invocation has closed stdin and a timeout; on POSIX, timeout cleanup
 kills its process group, including children holding stdout or stderr open.
 Malformed JSON, invalid UTF-8 and timeouts are failures in the report.
