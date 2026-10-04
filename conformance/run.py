@@ -456,8 +456,24 @@ def between(text: str, start: str, end: str) -> list[list[str]]:
     return sections
 
 
+def shell_drivers(shell: str) -> list[tuple[str, str]]:
+    """The executables to drive a script with, as (label, path). bash may be installed twice: the one on the
+    PATH and the system's, which on macOS is 3.2 and is the one a user of the system shell has."""
+    found = shutil.which(shell)
+    drivers = [(shell, found)] if found else []
+    if shell == "bash" and os.path.exists("/bin/bash") and (
+            not found or os.path.realpath(found) != os.path.realpath("/bin/bash")):
+        try:
+            version = subprocess.run(["/bin/bash", "-c", "printf %s \"$BASH_VERSION\""], capture_output=True, text=True,
+                                     timeout=10, check=False).stdout.split("(")[0]
+        except (OSError, subprocess.TimeoutExpired):
+            version = ""
+        drivers.append((f"bash {version} at /bin/bash".replace("  ", " ") if found else "bash", "/bin/bash"))
+    return drivers
+
+
 def shell_candidates(shell: str, script: str, name: str, cases: list[list[str]], env: dict, work: pathlib.Path,
-                     timeout: float) -> tuple[list[list[str]] | None, str]:
+                     timeout: float, executable: str) -> tuple[list[list[str]] | None, str]:
     """What the script offers for each word list, and a note: the bash spec, or why the shell was not driven."""
     path = work / f"completion.{shell}"
     path.write_text(script, encoding="utf-8")
@@ -467,7 +483,7 @@ def shell_candidates(shell: str, script: str, name: str, cases: list[list[str]],
         (work / "bash.cases").write_text("".join("".join(f"={word}\n" for word in words) + "<<RUN>>\n" for words in cases),
                                          encoding="utf-8")
         (work / "harness.bash").write_text(BASH_HARNESS, encoding="utf-8")
-        done = run_harness(["bash", "--noprofile", "--norc", str(work / "harness.bash"), str(path), name,
+        done = run_harness([executable, "--noprofile", "--norc", str(work / "harness.bash"), str(path), name,
                             str(work / "bash.cases")], env, cwd, timeout)
         if done is None:
             return None, "the bash harness did not answer"
@@ -479,7 +495,7 @@ def shell_candidates(shell: str, script: str, name: str, cases: list[list[str]],
     if shell == "zsh":
         (work / "zsh.cases").write_text("".join(line + "\n" for line in lines), encoding="utf-8")
         (work / "harness.zsh").write_text(ZSH_HARNESS, encoding="utf-8")
-        done = run_harness(["zsh", "-f", str(work / "harness.zsh"), str(path), name, str(work / "zsh.cases")],
+        done = run_harness([executable, "-f", str(work / "harness.zsh"), str(path), name, str(work / "zsh.cases")],
                            env, cwd, timeout)
         if done is None:
             return None, "the zsh harness did not answer"
@@ -492,7 +508,7 @@ def shell_candidates(shell: str, script: str, name: str, cases: list[list[str]],
         return sections, ""
     answers = []
     for line in lines:
-        done = run_harness(["fish", "--no-config", "-c", FISH_COMMAND, str(path), f"{name} {line}"], env, cwd, timeout)
+        done = run_harness([executable, "--no-config", "-c", FISH_COMMAND, str(path), f"{name} {line}"], env, cwd, timeout)
         if done is None:
             return None, "fish did not answer"
         if done.returncode != 0 and not done.stdout:
@@ -572,7 +588,9 @@ def check_completion_scripts(report: Report, program: Program, catalog: dict, co
         for entry in fallback:
             (work / "files" / entry).write_text("", encoding="utf-8")
         log = work / "launches.log"
-        resolved = [shutil.which(command[0]) or command[0]] + [
+        # The scripts are driven from another directory: a program named by a relative path is made absolute.
+        first = shutil.which(command[0]) or command[0]
+        resolved = [os.path.abspath(first) if os.path.exists(first) else first] + [
             str(pathlib.Path(word).resolve()) if not word.startswith("-") and pathlib.Path(word).exists() else word
             for word in command[1:]]
         wrapper = work / "bin" / name
@@ -591,52 +609,59 @@ def check_completion_scripts(report: Report, program: Program, catalog: dict, co
             terminal_env = {**env, "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"),
                             "XDG_DATA_HOME": str(home / ".local" / "share"), "ZDOTDIR": str(home)}
             piped = program.run("completion", shell, "--pager", "never")
-            shown = run_on_terminal([*resolved, "completion", shell, "--pager", "never"], terminal_env,
-                                    str(work / "files"), timeout)
+            try:
+                shown = run_on_terminal([*resolved, "completion", shell, "--pager", "never"], terminal_env,
+                                        str(work / "files"), timeout)
+            except OSError:
+                shown = None
             if shown is None:
-                report.skip(f"completion {shell} on a terminal writes nothing", "the program did not finish on a pseudo-terminal")
+                report.skip(f"completion {shell} on a terminal writes nothing",
+                            "the program could not be run to its end on a pseudo-terminal")
             else:
                 written = sorted(tree(home) - before)
                 report.add(f"completion {shell} on a terminal writes nothing", not written, f"wrote {written[:4]}")
                 report.add(f"completion {shell} on a terminal prints the script it prints into a pipe",
                            shown[0] == 0 and shown[1] == piped.stdout, f"exit {shown[0]}, {shown[1][:80]!r}")
             # ---- the script in its shell ----
-            check = f"completion {shell}: the script offers the words of __complete"
-            if shutil.which(shell) is None:
-                report.skip(check, f"{shell} is not installed")
-                continue
-            launched = len(log.read_text(encoding="utf-8").splitlines()) if log.exists() else 0
-            answers, note = shell_candidates(shell, script, name, cases, env, work, max(30.0, timeout * (len(cases) + 2)))
-            if answers is None or len(answers) != len(cases):
-                report.skip(check, note or f"the {shell} harness answered {len(answers or [])} of {len(cases)} cases")
-                continue
-            launches = (len(log.read_text(encoding="utf-8").splitlines()) if log.exists() else 0) - launched
-            differing, compared, unanswered = [], 0, []
-            for words, expected, offered in zip(cases, oracle, answers):
-                if expected is None:
+            drivers = shell_drivers(shell)
+            if not drivers:
+                report.skip(f"completion {shell}: the script offers the words of __complete", f"{shell} is not installed")
+            for label, executable in drivers:
+                check = f"completion {label}: the script offers the words of __complete"
+                launched = len(log.read_text(encoding="utf-8").splitlines()) if log.exists() else 0
+                answers, note = shell_candidates(shell, script, name, cases, env, work,
+                                                 max(30.0, timeout * (len(cases) + 2)), executable)
+                if answers is None or len(answers) != len(cases):
+                    report.skip(check, note or f"the {shell} harness answered {len(answers or [])} of {len(cases)} cases")
                     continue
-                if expected:
-                    compared += 1
-                    if set(offered) != set(expected):
-                        differing.append(f"{' '.join(words)!r}: only the script {sorted(set(offered) - set(expected))[:4]},"
-                                         f" only __complete {sorted(set(expected) - set(offered))[:4]}")
-                elif not (set(fallback) <= set(offered) or shell == "bash" and not offered
-                          and re.search(r" -o (default|bashdefault) ", note + " ")):
-                    unanswered.append(f"{' '.join(words)!r}: script {sorted(offered)[:6]}")
-            report.add(check, not differing and compared > 0,
-                       "; ".join(differing[:3]) or f"{compared} word lists compared, {launches} launches of the program")
-            if any(expected == [] for expected in oracle):
-                report.add(f"completion {shell}: the script falls back to file completion when __complete returns nothing",
-                           not unanswered, "; ".join(unanswered[:3]))
-            if not differing and compared > 0 and launches == 0:
-                carried = str(catalog.get("version", "")) != "" and str(catalog.get("version")) in script
-                report.add(f"completion {shell}: a script that carries its candidates carries the catalog version",
-                           carried, "" if carried else f"version {catalog.get('version')!r} is not in the script")
+                launches = (len(log.read_text(encoding="utf-8").splitlines()) if log.exists() else 0) - launched
+                differing, compared, unanswered = [], 0, []
+                for words, expected, offered in zip(cases, oracle, answers):
+                    if expected is None:
+                        continue
+                    if expected:
+                        compared += 1
+                        if set(offered) != set(expected):
+                            differing.append(f"{' '.join(words)!r}: only the script {sorted(set(offered) - set(expected))[:4]},"
+                                             f" only __complete {sorted(set(expected) - set(offered))[:4]}")
+                    elif not (set(fallback) <= set(offered) or shell == "bash" and not offered
+                              and re.search(r" -o (default|bashdefault) ", note + " ")):
+                        unanswered.append(f"{' '.join(words)!r}: script {sorted(offered)[:6]}")
+                report.add(check, not differing and compared > 0,
+                           "; ".join(differing[:3]) or f"{compared} word lists compared, {launches} launches of the program")
+                if any(expected == [] for expected in oracle):
+                    report.add(f"completion {label}: the script falls back to file completion when __complete returns nothing",
+                               not unanswered, "; ".join(unanswered[:3]))
+                if not differing and compared > 0 and launches == 0:
+                    carried = str(catalog.get("version", "")) != "" and str(catalog.get("version")) in script
+                    report.add(f"completion {label}: a script that carries its candidates carries the catalog version",
+                               carried, "" if carried else f"version {catalog.get('version')!r} is not in the script")
 
 
 def check_delegate_completion(report: Report, program: Program, catalog: dict, commands: list[dict]) -> None:
-    """Section 9: after a delegate's pattern the words are the delegate's, the same in every format."""
-    own = {item.get("long") for item in catalog.get("globalOptions", [])}
+    """Section 9: after a delegate's pattern the words are the delegate's, the same in every format. That
+    the program adds none of its own cannot be told from names: a delegate built on the same trunk has the
+    same global options, and an option after its pattern is its own."""
     for command in commands:
         if not command["external"] or not command["available"]:
             continue
@@ -647,8 +672,6 @@ def check_delegate_completion(report: Report, program: Program, catalog: dict, c
             continue
         records = body["data"]["records"]
         words = {record.get("word") for record in records}
-        report.add(f"{identifier}: __complete after a delegate's pattern offers none of the program's own options",
-                   not words & own, f"offered {sorted(words & own)[:6]}")
         text = program.run("__complete", "--format", "text", "--non-interactive", "--", *command["pattern"], "")
         report.add(f"{identifier}: __complete after a delegate's pattern is the same in every format",
                    text.returncode == 0 and text.stdout == text_records(records),
@@ -993,6 +1016,29 @@ def _run_kit(program: Program, report: Report) -> Report:
         if report.add(f"completion {shell} prints a script", script.returncode == 0 and script.stdout.strip() != ""
                       and script.stderr == "", f"exit {script.returncode}, stderr {script.stderr[:80]!r}"):
             scripts[shell] = script.stdout
+    offered_ids = [item["id"] for item in commands if not item["hidden"] and item["available"]]
+    withheld_ids = [item["id"] for item in commands if item["hidden"] or not item["available"]]
+    for built_in in ("help", "describe"):
+        missing, unexpected = [], []
+        for identifier in offered_ids[:3]:
+            answer = program.run("__complete", "--format", "json", "--non-interactive", "--", built_in, identifier[:2])
+            try:
+                words = {record.get("word") for record in parse_json(answer.stdout)["data"]["records"]}
+            except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
+                words = set()
+            if identifier not in words:
+                missing.append(identifier)
+        for identifier in withheld_ids[:4]:
+            answer = program.run("__complete", "--format", "json", "--non-interactive", "--", built_in, identifier[:-1])
+            try:
+                words = {record.get("word") for record in parse_json(answer.stdout)["data"]["records"]}
+            except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
+                words = set()
+            if identifier in words:
+                unexpected.append(identifier)
+        report.add(f"__complete after {built_in} offers the command identifiers", not missing, f"missing {missing}")
+        report.add(f"__complete after {built_in} offers no hidden or unavailable identifier", not unexpected,
+                   f"offered {unexpected}")
     check_completion_scripts(report, program, catalog, commands, scripts)
     check_delegate_completion(report, program, catalog, commands)
     check_completion_install(report, program, by_id)
@@ -1067,7 +1113,8 @@ def main(argv: list[str]) -> int:
                                         "it offers",
                                         "completion in a shell that is not installed (skipped per shell), and a "
                                         "bash script registered otherwise than by `complete -F`",
-                                        "completion after a delegate's pattern inside a shell",
+                                        "completion after a delegate's pattern inside a shell, and whether a "
+                                        "program adds words of its own to its delegate's",
                                         "whether an installed completion script is stale after an upgrade",
                                         "the writes of `completion install --apply`: the kit runs the plan only"]}}
     if report_path:

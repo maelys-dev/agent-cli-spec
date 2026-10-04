@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+Five points reported by maelys-cli on moving its pin to 2.7.0, one of them a
+regression of the kit.
+
+- **The kit failed on a program named by a relative path.** Since 2.7.0 the
+  completion scripts are driven from another directory, and `conformance/run.py
+  build/bin/my-program`, the form the README shows, ended with the single
+  line `FAIL program can be run`, every later check lost. The path is made
+  absolute, a test runs the kit that way, and a pseudo-terminal that cannot
+  be had is now a `SKIP` rather than the end of the report.
+- **The kit drives every bash it finds**, the system's included. It drove
+  the one on the PATH alone: on a macOS where Homebrew installed bash 5, the
+  bash 3.2 defect of 2.7.0's own fixture and of both reference
+  implementations was invisible, while `/bin/bash` is the one a user of the
+  system shell has. A second bash gets its own checks, named after its
+  version and path.
+- **Section 9: the program adds no word of its own to its delegate's.** The
+  text said the program's own options were not among the delegate's words,
+  and the kit intersected names. A delegate built on the same trunk has the
+  same global options and accepts them: `--format` after its pattern is its
+  own, spelled like the program's, and a program relaying it faithfully
+  would have failed. The check is removed; the rule cannot be told from
+  names, and the report says so. The equality of formats stays checked.
+- **Section 6: a hidden or an unavailable command is never offered, as a
+  word or as an identifier.** "Never an unavailable command" left the
+  identifiers after `help` and `describe` undecided, and the two reference
+  implementations had decided differently. `describe` still answers for
+  such a command; completion does not propose it. The kit now checks the
+  identifiers after `help` and `describe`, which it never had, and this
+  repository's fixture, which offered none, offers them.
+- Section 6 says what it left open: whether options are offered before a `-`
+  is typed is the implementation's choice. A script is compared with its own
+  `__complete`, never with another implementation's.
+
 ## 2.7.1 — 2026-10-04
 
 - The sentence naming the implementations, in section 0 and in the README,
