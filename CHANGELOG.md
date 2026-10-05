@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.8.1 — 2026-10-05
 
 - **The kit failed a correct program on macOS when a completion script was
   longer than 4096 bytes.** `completion SHELL on a terminal prints the script
