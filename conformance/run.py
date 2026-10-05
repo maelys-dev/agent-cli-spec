@@ -518,14 +518,25 @@ def shell_candidates(shell: str, script: str, name: str, cases: list[list[str]],
 
 
 def run_on_terminal(argv: list[str], env: dict, cwd: str, timeout: float) -> tuple[int, str] | None:
-    """Run with stdout on a pseudo-terminal; None where there is none, or when the program does not finish."""
+    """Run with stdout on a pseudo-terminal; None where there is none, or when the program does not finish.
+
+    The terminal is asked to pass output through untouched, so what is read is what the program wrote, byte
+    for byte as into a pipe. Translating the newlines back afterwards is not enough: past 4096 bytes macOS
+    turns a newline into two carriage returns and a line feed."""
     if os.name != "posix":
         return None
     import pty
     import select
+    import termios
     master, slave = pty.openpty()
     chunks: list[bytes] = []
     try:
+        try:
+            attributes = termios.tcgetattr(slave)
+            attributes[1] &= ~termios.OPOST
+            termios.tcsetattr(slave, termios.TCSANOW, attributes)
+        except termios.error:
+            return None
         with subprocess.Popen(argv, env=env, cwd=cwd, stdin=subprocess.DEVNULL, stdout=slave,
                               stderr=subprocess.DEVNULL, start_new_session=True) as process:
             deadline = time.monotonic() + timeout
@@ -547,7 +558,7 @@ def run_on_terminal(argv: list[str], env: dict, cwd: str, timeout: float) -> tup
                         pass
                     process.wait()
                     return None
-        return process.returncode, b"".join(chunks).decode("utf-8", "replace").replace("\r\n", "\n")
+        return process.returncode, b"".join(chunks).decode("utf-8", "replace")
     finally:
         os.close(slave)
         os.close(master)

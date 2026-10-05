@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **The kit failed a correct program on macOS when a completion script was
+  longer than 4096 bytes.** `completion SHELL on a terminal prints the script
+  it prints into a pipe` read the script back through a pseudo-terminal and
+  turned each `\r\n` into a newline. Past 4096 bytes the macOS terminal can
+  write `\r\r\n` for one newline, so a script with a line ending on that
+  boundary came back one byte longer and the check failed, every time for
+  that text. Reported by maelys-cli, whose static scripts are 5 to 7
+  kilobytes. The pseudo-terminal now passes output through untouched and the
+  comparison is byte for byte; where the terminal cannot be set that way the
+  two checks are skipped. No requirement and no schema changes, and no other
+  verdict moves: a program that passed 2.8.0 passes still.
+
 ## 2.8.0 — 2026-10-05
 
 Five points reported by maelys-cli on moving its pin to 2.7.0, one of them a

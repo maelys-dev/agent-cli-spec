@@ -14,7 +14,8 @@ import unittest
 from support import FixtureProgram, ROOT
 
 sys.path.insert(0, str(ROOT / "conformance"))
-from run import Program, Report, SCHEMAS, check_jsonl, envelope, field_jsonl, field_text, main, run_kit, text_records
+from run import (Program, Report, SCHEMAS, check_jsonl, envelope, field_jsonl, field_text, main, run_kit,
+                 run_on_terminal, text_records)
 from validate import json_equal, unsupported_keywords, validate
 
 
@@ -250,6 +251,20 @@ class ProcessTest(unittest.TestCase):
         report = json.loads(stdout.getvalue())
         self.assertFalse(report["passed"])
         self.assertTrue(any("timed out" in check["detail"] for check in report["checks"]))
+
+    @unittest.skipUnless(os.name == "posix", "pseudo-terminals are POSIX")
+    def test_a_terminal_returns_what_a_pipe_returns_past_4096_bytes(self):
+        """2.8.0 failed `completion SHELL on a terminal prints the script it prints into a pipe` on macOS for
+        some scripts longer than 4096 bytes: the terminal turned one newline into two carriage returns and a
+        line feed there, and the kit only translated one. Lines of 16 bytes put a newline on that boundary."""
+        text = "".join(f"{index:015d}\n" for index in range(400)) + "a carriage return of the program's own\r\n"
+        with tempfile.TemporaryDirectory() as directory:
+            script = pathlib.Path(directory) / "long.py"
+            script.write_text(f"import sys\nsys.stdout.write({text!r})\n", encoding="utf-8")
+            program = Program([sys.executable, str(script)])
+            shown = run_on_terminal(program.command, dict(os.environ), directory, 10)
+            self.assertEqual(shown, (0, program.run().stdout))
+        self.assertEqual(shown[1], text)
 
     @unittest.skipUnless(os.name == "posix", "process groups are POSIX")
     def test_timeout_does_not_wait_for_a_grandchild_in_another_session(self):
