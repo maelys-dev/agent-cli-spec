@@ -307,8 +307,9 @@ the catalog: `NAME` MUST be listed in the top-level `required` of the
 command's `outputSchema`, and any other name fails with `VALIDATION_FAILED`
 while nothing has been written. A member the schema leaves optional is
 refused there even when this run would have carried it: what such a command
-accepts is read in the catalog, never in the result. A `read` command may
-decide on `data`, a refusal costing nothing there.
+accepts is read in the catalog, never in the result. A schema that requires
+no member therefore accepts no `--field`. A `read` command may decide on
+`data`, a refusal costing nothing there.
 
 In text mode the member is rendered by the pipe rules of section 7. An array
 whose every element is an object gives one row per object, the columns being

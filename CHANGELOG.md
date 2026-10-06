@@ -16,7 +16,9 @@ review of the contract and of maelys-cli.
   top-level `required` of the command's `outputSchema`. A member the schema
   leaves optional is refused there too. A `read` command decides on `data` as
   before. A program that wants `--field` on a transaction lists the members
-  it always returns in `required`.
+  it always returns in `required`; **a transaction or an `execute` command
+  whose `outputSchema` requires no member accepts no `--field` from 2.9.0**,
+  where it accepted any member of its result before.
 - **A refusal caused by the format the environment selects is reported
   before the command runs** (section 5): it is a rendering constraint of
   section 8, whatever selected the format.
