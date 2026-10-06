@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.9.0 — 2026-10-06
 
 Two guarantees about what a caller may conclude from a failure, raised by a
 review of the contract and of maelys-cli.
