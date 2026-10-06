@@ -65,5 +65,7 @@ no option of any command borrows a trunk spelling with another shape.
 A command the trunk reserves (`completion.install`, section 6) is offered or
 not. A product that offers it declares the reserved shape and MAY add options
 of its own; a product MUST NOT declare another command for the same intent.
-The conformance kit checks the shape where a catalog declares the command,
-runs its plan and never its `--apply`.
+The conformance kit checks the shape where a catalog declares the command
+and runs its plan. It runs `--apply` only with an option the program must
+refuse before it writes, in a home the kit made, and never an installation
+that would succeed.

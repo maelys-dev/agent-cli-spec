@@ -199,6 +199,30 @@ class KitRegressionTest(unittest.TestCase):
         # a read decides on its data, as before
         self.assertEqual(program.run("version", "--field", "version").stdout, "1.0.0\n")
 
+    def test_fixture_applies_the_plan_it_was_given_and_no_other(self):
+        """Section 4: --apply --expect applies the reviewed plan, refuses another before it writes, and a new
+        plan says where things stand afterwards."""
+        program = FixtureProgram()
+        with tempfile.TemporaryDirectory(prefix="agent cli expect ") as directory:
+            home = pathlib.Path(directory)
+            env = {"HOME": str(home), "XDG_DATA_HOME": "", "XDG_CONFIG_HOME": "", "ZDOTDIR": ""}
+            plan = lambda: json.loads(program.run("completion", "install", "bash", "--json", env=env).stdout)["data"]
+            reviewed = plan()["fingerprint"]
+            self.assertEqual(program.run("completion", "install", "bash", "--field", "fingerprint", env=env).stdout,
+                             reviewed + "\n")
+            (home / ".bashrc").write_text("export EDITOR=vi\n", encoding="utf-8")
+            self.assertNotEqual(plan()["fingerprint"], reviewed)
+            stale = program.run("completion", "install", "bash", "--apply", "--expect", reviewed, "--json", env=env)
+            self.assertEqual((stale.returncode, stale.stdout), (1, ""))
+            self.assertEqual(json.loads(stale.stderr)["error"]["code"], "PRECONDITION_FAILED")
+            self.assertEqual(sorted(path.name for path in home.iterdir()), [".bashrc"])
+            reviewed = plan()["fingerprint"]
+            applied = program.run("completion", "install", "bash", "--apply", "--expect", reviewed, "--json", env=env)
+            self.assertEqual(json.loads(applied.stdout)["data"]["fingerprint"], reviewed)
+            self.assertNotEqual(plan()["fingerprint"], reviewed)
+            alone = program.run("completion", "install", "bash", "--expect", reviewed, env=env)
+            self.assertIn("VALIDATION_FAILED", alone.stderr)
+
     def test_fixture_installs_its_completion_once_and_leaves_the_rest(self):
         """Section 6: --apply adds or replaces one identified block and leaves the rest of the file as it was."""
         with tempfile.TemporaryDirectory(prefix="agent cli install ") as directory:

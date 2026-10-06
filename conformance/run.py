@@ -689,9 +689,18 @@ def check_delegate_completion(report: Report, program: Program, catalog: dict, c
                    f"text {text.stdout[:80]!r}, json {sorted(words)[:6]}")
 
 
+def plan_fingerprint(completed: subprocess.CompletedProcess):
+    """The fingerprint a plan carries, or None when the run gave no plan."""
+    try:
+        return parse_json(completed.stdout)["data"]["fingerprint"] if completed.returncode == 0 else None
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
 def check_completion_install(report: Report, program: Program, by_id: dict) -> None:
     """Section 6: the reserved installation, where a catalog declares it. The plan is run; --apply is run only
-    with a --field the program must refuse before it writes (section 5), in a home the kit made."""
+    with a --field (section 5) or an --expect (section 4) the program must refuse before it writes, in a home
+    the kit made. An installation that would succeed is never run."""
     command = by_id.get("completion.install")
     if command is None:
         return
@@ -722,6 +731,7 @@ def check_completion_install(report: Report, program: Program, by_id: dict) -> N
             declared = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
             optional = sorted(name for name in declared if name not in required)
             base = ["completion", "install", shell, "--format", "jsonl", "--non-interactive"]
+            plain = ["completion", "install", shell, "--format", "json", "--non-interactive"]
             if required and required[0] in body["data"]:
                 shown = program.run(*base, "--field", required[0], env=env)
                 report.add(f"completion install {shell}: --field of a member outputSchema requires is rendered",
@@ -733,6 +743,16 @@ def check_completion_install(report: Report, program: Program, by_id: dict) -> N
                             "outputSchema requires no member, so the command accepts no --field")
             root = os.path.realpath(home)
             paths = [entry.get("path") for entry in body["data"].get("files", []) if isinstance(entry, dict)]
+            binds = any(item.get("long") == "--expect" for item in command["input"]["options"])
+            fingerprint = body["data"].get("fingerprint")
+            if binds:
+                # ---- the plan is bound to its application (section 4): what needs no --apply ----
+                second = plan_fingerprint(program.run(*plain, env=env))
+                report.add(f"completion install {shell}: two plans on the same state carry the same fingerprint",
+                           isinstance(fingerprint, str) and second == fingerprint,
+                           f"first {fingerprint!r}, second {second!r}")
+                check_failure(report, f"completion install {shell}: --expect without --apply fails with VALIDATION_FAILED",
+                              program.run(*plain, "--expect", "sha256:" + "0" * 64, env=env), "VALIDATION_FAILED")
             if issues or not paths or not all(isinstance(path, str) and os.path.realpath(path).startswith(root + os.sep)
                                               for path in paths):
                 report.skip(f"completion install {shell}: --apply with a --field it cannot accept writes nothing",
@@ -749,6 +769,27 @@ def check_completion_install(report: Report, program: Program, by_id: dict) -> N
                 if written:
                     shutil.rmtree(home)
                     home.mkdir()
+            if not binds or not isinstance(fingerprint, str) or len(fingerprint) < 2:
+                continue
+            # ---- a plan that is not the reviewed one is refused before anything is written (section 4) ----
+            other = fingerprint[:-1] + ("0" if fingerprint[-1] != "0" else "1")
+            stale = program.run(*plain, "--apply", "--expect", other, env=env)
+            written = sorted(tree(home))
+            check_failure(report, f"completion install {shell}: --apply with --expect of another fingerprint fails "
+                          "with PRECONDITION_FAILED", stale, "PRECONDITION_FAILED")
+            report.add(f"completion install {shell}: --apply with --expect of another fingerprint writes nothing",
+                       not written, f"wrote {written[:4]}")
+            if written:
+                shutil.rmtree(home)
+                home.mkdir()
+            script = next((entry["path"] for entry in body["data"]["files"] if entry.get("kind") == "script"), None)
+            if script is None:
+                continue
+            pathlib.Path(script).parent.mkdir(parents=True, exist_ok=True)
+            pathlib.Path(script).write_text("# written by the agent-cli conformance kit\n", encoding="utf-8")
+            third = plan_fingerprint(program.run(*plain, env=env))
+            report.add(f"completion install {shell}: the fingerprint changes when the file to write has changed",
+                       isinstance(third, str) and third != fingerprint, f"before {fingerprint!r}, after {third!r}")
 
 
 def trunk_shape(item: dict, expected: dict | None) -> bool:
@@ -862,6 +903,16 @@ def _run_kit(program: Program, report: Report) -> Report:
                        if entry not in declared_options]
         report.add(f"{identifier}: requires and conflictsWith name declared options or operands", not unresolved,
                    f"unresolved {unresolved}")
+        expect = next((item for item in command["input"]["options"] if item.get("long") == "--expect"), None)
+        if expect is not None and isinstance(command["effect"], dict):
+            # Section 4: on a transaction --expect binds the application to the plan, and has one shape.
+            argument = expect.get("argument") if isinstance(expect.get("argument"), dict) else {}
+            schema = command.get("outputSchema") if isinstance(command.get("outputSchema"), dict) else {}
+            report.add(f"{identifier}: --expect has the reserved shape and outputSchema requires fingerprint",
+                       argument.get("type") == "digest" and argument.get("algorithms") == ["sha256"]
+                       and "--apply" in expect.get("requires", []) and expect.get("repeatable") is False
+                       and "fingerprint" in schema.get("required", []),
+                       f"argument {argument}, requires {expect.get('requires')}, required {schema.get('required')}")
         groups: dict[str, set] = {}
         for item in command["input"]["options"]:
             if item.get("group"):
@@ -1165,6 +1216,8 @@ def main(argv: list[str]) -> int:
                                         "`--apply` only with a `--field` the program must refuse before it writes",
                                         "a refusal to render after a write on any other command, and a format "
                                         "the environment selects",
+                                        "whether a fingerprint covers the action and the state on a product's own "
+                                        "transactions, and an `--apply --expect` that succeeds",
                                         "a failure in the middle of a `jsonl` rendering"]}}
     if report_path:
         try:
