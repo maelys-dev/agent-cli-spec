@@ -186,6 +186,37 @@ exact later action. `--dry-run` and `--plan` MUST be refused with
 `VALIDATION_FAILED` and a hint naming `--apply`: one spelling of the intent
 across products is what the contract exists for.
 
+Re-validation says that the state still allows a transaction, not that the
+action is the one the caller reviewed: `--apply` plans again and applies that
+plan. A transaction MAY therefore bind its application to the reviewed plan,
+and one that does has one spelling for it. It declares the option `--expect
+FINGERPRINT` (a `digest` argument whose `algorithms` are `["sha256"]`,
+`requires` naming `--apply`) and lists `fingerprint` in the top-level
+`required` of its `outputSchema`, so that the catalog alone says whether a
+plan can be bound and `--field fingerprint` reads the value (section 5).
+`data.fingerprint` is a `sha256:HEX` string the program computes over the
+action the plan describes and over the state of the resources that action
+would touch: two runs that would perform the same writes on the same state
+carry the same fingerprint, and a run that would perform another write, or
+the same write on another state, carries another. How it is computed is the
+product's business; what equality means is this contract's. With `--apply
+--expect FINGERPRINT` the program computes the fingerprint of the action it
+is about to perform and, when it differs, fails with `PRECONDITION_FAILED`
+before anything is written, the hint saying to plan again: the caller
+concludes that nothing changed and that the plan it reviewed is stale. The
+result of `--apply` carries the fingerprint of the action performed. On a
+transaction `--expect` has this meaning and no other. A transaction whose
+plan has no stable identity declares none of this, and a caller that never
+passes `--expect` is served by the re-validation, as before. The fingerprint
+narrows the window between the review and the write; closing it is the
+product's locking, which this contract does not prescribe.
+
+After an `--apply` whose outcome the caller cannot tell, a connection lost
+for one, a new plan says where things stand: a fingerprint equal to the
+reviewed one says the action is still to be done, another that something
+changed and the plan is to be reviewed again. That is why the fingerprint
+covers the state and not the arguments alone.
+
 An effect is declared, so it holds whatever the streams are. A terminal on
 stdout or stderr changes presentation (sections 5 and 7), never whether a
 command writes: a `read` that writes when stdout is a terminal is not a
@@ -353,7 +384,9 @@ has one spelling: pattern `completion install SHELL`, the transaction effect
 `kind` `script` or `managed-block`, `action` `create`, `update` or
 `unchanged`), `catalog` (its `version`, and the implementation's `digest` if
 it keeps one) and `activate`, the exact command that loads the completion in
-the current session. The plan names every path and writes nothing, as
+the current session. An installation that binds its plan (section 4) adds
+`--expect` and `fingerprint`, which say what would be written over what is
+there, where `catalog` says which catalog the script was generated from. The plan names every path and writes nothing, as
 section 4 requires; `--apply` writes the script, adds or replaces one
 identified block in the shell's startup file where the shell needs one, and
 leaves the rest of that file as it was. A program that declares nothing of

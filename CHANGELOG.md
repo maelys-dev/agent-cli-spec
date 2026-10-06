@@ -37,6 +37,35 @@ review of the contract and of maelys-cli.
 - The fixture declares what its transactions always return, and two defects
   (`field-after-write`, `field-optional-after-write`) prove the kit sees the
   difference.
+- **A transaction may bind its application to the plan the caller
+  reviewed** (section 4). Re-validation says that the state still allows a
+  transaction, not that the action is the one that was reviewed: `--apply`
+  plans again and applies that plan, so a state that moved, or an argument
+  the caller changed, went through. Products had each their own remedy
+  (`REVISION_CONFLICT` in Hermes, a `precondition` object elsewhere). The
+  contract reserves one spelling, offered or not: the option `--expect
+  FINGERPRINT` and the member `data.fingerprint`, a `sha256:HEX` the program
+  computes over the action and over the state that action would touch. With
+  `--apply --expect` a fingerprint that no longer matches fails with
+  `PRECONDITION_FAILED` before anything is written. The product chooses how
+  it computes the fingerprint; the contract says what equality means. After
+  an `--apply` whose outcome is unknown, a new plan says whether the action
+  is still to be done. No program has to offer this, and a caller that never
+  passes `--expect` is served as before; `completion install` may carry the
+  pair, and `schemas/completion-install.json` accepts `fingerprint`.
+- The kit checks the binding where a catalog declares it. On every
+  transaction that declares `--expect`: its shape, and `fingerprint` in the
+  `required` of `outputSchema`. On `completion install`: two plans on the same
+  state carry the same fingerprint, `--expect` without `--apply` is refused,
+  `--apply` with another fingerprint fails with `PRECONDITION_FAILED` and
+  writes nothing, and the fingerprint changes once the kit has put another
+  content where the script goes. It never runs an installation that would
+  succeed, and it cannot tell what a product's own fingerprint covers; its
+  report says so. Three defects of the fixture (`expect-without-fingerprint`,
+  `expect-after-write`, `fingerprint-constant`) prove these checks.
+- `spec/extensions.md` said the kit never runs `--apply` on a reserved
+  command; since the first point above it runs it with an option the program
+  must refuse, and the text now says that.
 
 ## 2.8.1 — 2026-10-05
 

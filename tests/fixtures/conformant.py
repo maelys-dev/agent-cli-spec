@@ -11,6 +11,7 @@ that calls `__complete`.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -135,9 +136,16 @@ CATALOG.append(command("completion.install", ["completion", "install"], "complet
                        "Install the completion script.", {"plan": "preview", "apply": "apply"},
                        [{"name": "SHELL", "required": True, "variadic": False, "summary": "Shell.", "type": "choice",
                          "choices": ["bash", "zsh", "fish"]}],
-                       [option("--apply", "Write the script and the startup block.")]))
-CATALOG[-1]["outputSchema"] = {"type": "object", "required": ["mode", "shell", "files", "catalog", "activate"],
+                       [option("--apply", "Write the script and the startup block."),
+                        option("--expect", "Apply only the plan that carries this fingerprint.",
+                               {"name": "FINGERPRINT", "type": "digest", "algorithms": ["sha256"], "digits": 64},
+                               requires=["--apply"])],
+                       [{"kind": "requires", "options": ["--expect", "--apply"]}]))
+CATALOG[-1]["outputSchema"] = {"type": "object",
+                               "required": ["mode", "shell", "files", "catalog", "activate", "fingerprint"],
                                "properties": {"changed": {"type": "boolean"}}}
+if BREAK == "expect-without-fingerprint":
+    CATALOG[-1]["outputSchema"]["required"].remove("fingerprint")
 for transaction in ("note.write", "note.commit"):
     next(item for item in CATALOG if item["id"] == transaction)["outputSchema"] = {
         "type": "object", "required": ["mode", "changed"]}
@@ -172,13 +180,13 @@ def envelope(command_id, ok, exit_code, payload, compact):
     return json.dumps(body, indent=None if compact else 2, separators=(",", ":") if compact else None) + "\n"
 
 
-def fail(command_id, code, message, fmt, compact):
+def fail(command_id, code, message, fmt, compact, hint="read describe."):
     if BREAK == "code-drift" and code == "INVALID_COMMAND":
         code = "INVALID_PATH"
     if fmt == "text":
-        sys.stderr.write(f"{PROGRAM}: [{code}] {message}\nHint: read describe.\n")
+        sys.stderr.write(f"{PROGRAM}: [{code}] {message}\nHint: {hint}\n")
     else:
-        sys.stderr.write(envelope(command_id, False, 1, {"code": code, "message": message, "hint": "read describe."}, compact))
+        sys.stderr.write(envelope(command_id, False, 1, {"code": code, "message": message, "hint": hint}, compact))
     return 1
 
 
@@ -423,6 +431,13 @@ def install_completion(shell, apply):
         else:
             wanted, action = current + ("" if not current or current.endswith("\n") else "\n") + block, "update"
         writes.append((rc_path, wanted, "managed-block", action))
+    # Section 4: the fingerprint covers what would be written and what is there, and is computed before the write.
+    state = [[path, kind, action, hashlib.sha256(text.encode("utf-8")).hexdigest(),
+              None if read(path) is None else hashlib.sha256(read(path).encode("utf-8")).hexdigest()]
+             for path, text, kind, action in writes]
+    fingerprint = "sha256:" + hashlib.sha256(json.dumps([shell, state], separators=(",", ":")).encode("utf-8")).hexdigest()
+    if BREAK == "fingerprint-constant":
+        fingerprint = "sha256:" + "1" * 64
     if apply or BREAK == "install-plan-writes":
         for path, text, _kind, action in writes:
             if action != "unchanged":
@@ -431,7 +446,7 @@ def install_completion(shell, apply):
     if BREAK == "install-plan-no-paths":
         files = [{key: value for key, value in entry.items() if key != "path"} for entry in files]
     return {"mode": "apply" if apply else "plan", "shell": shell, "files": files, "catalog": {"version": VERSION},
-            "activate": f"source {rc_path or script_path}",
+            "activate": f"source {rc_path or script_path}", "fingerprint": fingerprint,
             "changed": bool(apply) and any(action != "unchanged" for _p, _t, _k, action in writes)}
 
 
@@ -599,7 +614,20 @@ def main(argv):
                 with open(os.path.join(os.environ.get("HOME") or ".", f".{PROGRAM}-completion"), "w") as stream:
                     stream.write(text)
         else:
-            data = install_completion(shell, bool(options.get("--apply")))
+            applying, expected = bool(options.get("--apply")), options.get("--expect")
+            if expected is not None and not applying:
+                return fail(identifier, "VALIDATION_FAILED", "--expect requires --apply.", fmt, compact)
+            if expected is not None and re.fullmatch(r"sha256:[0-9a-f]{64}", str(expected)) is None:
+                return fail(identifier, "VALIDATION_FAILED", "--expect takes sha256:HEX, 64 digits.", fmt, compact)
+            if BREAK == "expect-after-write":
+                data = install_completion(shell, applying)
+                stale = expected is not None and expected != install_completion(shell, False)["fingerprint"]
+            else:
+                stale = expected is not None and expected != install_completion(shell, False)["fingerprint"]
+                data = None if stale else install_completion(shell, applying)
+            if stale:
+                return fail(identifier, "PRECONDITION_FAILED", "The installation is not the one this fingerprint names.",
+                            fmt, compact, hint=f"plan again: {PROGRAM} completion install {shell}")
             text = "".join(f"{entry.get('action')} {entry.get('path', '')}\n" for entry in data["files"]) \
                 + f"{data['mode']}: {data['activate']}\n"
     elif identifier == "complete.candidates":

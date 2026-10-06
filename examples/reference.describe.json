@@ -862,9 +862,35 @@
             "summary": "Write the script and the startup block.",
             "requires": [],
             "conflictsWith": []
+          },
+          {
+            "long": "--expect",
+            "required": false,
+            "repeatable": false,
+            "summary": "Apply only the plan that carries this fingerprint.",
+            "requires": [
+              "--apply"
+            ],
+            "conflictsWith": [],
+            "argument": {
+              "name": "FINGERPRINT",
+              "type": "digest",
+              "algorithms": [
+                "sha256"
+              ],
+              "digits": 64
+            }
           }
         ],
-        "constraints": [],
+        "constraints": [
+          {
+            "kind": "requires",
+            "options": [
+              "--expect",
+              "--apply"
+            ]
+          }
+        ],
         "passthrough": false
       },
       "outputSchema": {
@@ -874,7 +900,8 @@
           "shell",
           "files",
           "catalog",
-          "activate"
+          "activate",
+          "fingerprint"
         ],
         "properties": {
           "changed": {
