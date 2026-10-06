@@ -409,7 +409,11 @@
         "passthrough": false
       },
       "outputSchema": {
-        "type": "object"
+        "type": "object",
+        "required": [
+          "mode",
+          "changed"
+        ]
       },
       "exitCodes": {
         "0": "command completed",
@@ -806,7 +810,11 @@
         "passthrough": false
       },
       "outputSchema": {
-        "type": "object"
+        "type": "object",
+        "required": [
+          "mode",
+          "changed"
+        ]
       },
       "exitCodes": {
         "0": "command completed",
@@ -860,7 +868,19 @@
         "passthrough": false
       },
       "outputSchema": {
-        "type": "object"
+        "type": "object",
+        "required": [
+          "mode",
+          "shell",
+          "files",
+          "catalog",
+          "activate"
+        ],
+        "properties": {
+          "changed": {
+            "type": "boolean"
+          }
+        }
       },
       "exitCodes": {
         "0": "command completed",

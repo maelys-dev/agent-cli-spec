@@ -176,6 +176,29 @@ class KitRegressionTest(unittest.TestCase):
                 self.assertEqual(fixture.field_text(value), text)
                 self.assertEqual(field_jsonl(value), lines)
 
+    def test_fixture_refuses_a_field_before_it_writes(self):
+        """Section 5: on a command that may write, --field is decided from the catalog before the command runs.
+        Until 2.8.1 the fixture installed the script, then failed with VALIDATION_FAILED on the member."""
+        program = FixtureProgram()
+        with tempfile.TemporaryDirectory(prefix="agent cli field ") as directory:
+            home = pathlib.Path(directory)
+            env = {"HOME": str(home), "XDG_DATA_HOME": "", "XDG_CONFIG_HOME": "", "ZDOTDIR": ""}
+            for name in ("no-such-member", "changed"):
+                refused = program.run("completion", "install", "bash", "--apply", "--field", name, env=env)
+                self.assertEqual((refused.returncode, refused.stdout), (1, ""))
+                self.assertIn("VALIDATION_FAILED", refused.stderr)
+                self.assertEqual(list(home.iterdir()), [])
+            applied = program.run("completion", "install", "bash", "--apply", "--field", "mode", env=env)
+            self.assertEqual((applied.returncode, applied.stdout), (0, "apply\n"))
+            self.assertTrue((home / ".bashrc").exists())
+        with tempfile.TemporaryDirectory() as directory:
+            note = pathlib.Path(directory) / "note"
+            refused = program.run("note", "write", str(note), "--apply", "--field", "path")
+            self.assertEqual(refused.returncode, 1)
+            self.assertEqual(program.run("note", "write", str(note), "--field", "mode").stdout, "plan\n")
+        # a read decides on its data, as before
+        self.assertEqual(program.run("version", "--field", "version").stdout, "1.0.0\n")
+
     def test_fixture_installs_its_completion_once_and_leaves_the_rest(self):
         """Section 6: --apply adds or replaces one identified block and leaves the rest of the file as it was."""
         with tempfile.TemporaryDirectory(prefix="agent cli install ") as directory:

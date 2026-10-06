@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased
+
+Two guarantees about what a caller may conclude from a failure, raised by a
+review of the contract and of maelys-cli.
+
+- **A refusal to render no longer follows a write.** Section 5 said that
+  `--field` of a name `data` does not carry fails with `VALIDATION_FAILED`,
+  which is only known once the command has run: `completion install bash
+  --apply --field no-such-member` installed the script, then answered with a
+  failure a caller reads as "nothing changed". This repository's reference
+  fixture did exactly that. On a command that may write, a transaction with
+  or without `--apply` and an `execute` command, the name is now checked
+  before the command runs and against the catalog: it MUST be listed in the
+  top-level `required` of the command's `outputSchema`. A member the schema
+  leaves optional is refused there too. A `read` command decides on `data` as
+  before. A program that wants `--field` on a transaction lists the members
+  it always returns in `required`.
+- **A refusal caused by the format the environment selects is reported
+  before the command runs** (section 5): it is a rendering constraint of
+  section 8, whatever selected the format.
+- **A failure leaves stdout empty in every format, `jsonl` included**
+  (section 7). The text already said "stdout empty"; it now says that a
+  command writes no record before it knows that it succeeded, and that output
+  flowing while the work runs is a `protocol-stream`.
+- The kit checks the first point where it can do so without risk, on the
+  reserved `completion install`: in a home it made, and only when the plan
+  names paths inside it, it runs `--apply` with a `--field` absent from
+  `outputSchema` and with one the schema leaves optional, and requires
+  `VALIDATION_FAILED` and no file written; it also requires that a `--field`
+  the schema requires is rendered. **A program that passed 2.8.1 and
+  declares `completion.install` fails until it checks the name first.** The
+  kit does not check the rule on other commands, a format the environment
+  selects, or a failure in the middle of a `jsonl` rendering; its report says
+  so.
+- The fixture declares what its transactions always return, and two defects
+  (`field-after-write`, `field-optional-after-write`) prove the kit sees the
+  difference.
+
 ## 2.8.1 — 2026-10-05
 
 - **The kit failed a correct program on macOS when a completion script was
