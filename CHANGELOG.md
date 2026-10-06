@@ -2,7 +2,8 @@
 
 ## 2.9.0 — 2026-10-06
 
-Two guarantees about what a caller may conclude from a failure, raised by a
+Two guarantees about what a caller may conclude from a failure, and a way to
+bind an application to the plan that was reviewed. All three were raised by a
 review of the contract and of maelys-cli.
 
 - **A refusal to render no longer follows a write.** Section 5 said that
