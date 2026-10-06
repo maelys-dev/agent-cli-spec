@@ -690,7 +690,8 @@ def check_delegate_completion(report: Report, program: Program, catalog: dict, c
 
 
 def check_completion_install(report: Report, program: Program, by_id: dict) -> None:
-    """Section 6: the reserved installation, where a catalog declares it. The plan is run, never --apply."""
+    """Section 6: the reserved installation, where a catalog declares it. The plan is run; --apply is run only
+    with a --field the program must refuse before it writes (section 5), in a home the kit made."""
     command = by_id.get("completion.install")
     if command is None:
         return
@@ -715,6 +716,39 @@ def check_completion_install(report: Report, program: Program, by_id: dict) -> N
             report.add(f"completion install {shell}: the plan matches schemas/completion-install.json",
                        not issues and body["data"].get("mode") == "plan" and body["data"].get("shell") == shell,
                        issues_text(issues) or f"mode {body['data'].get('mode')!r}, shell {body['data'].get('shell')!r}")
+            # ---- a refusal to render never follows a write (section 5) ----
+            schema = command.get("outputSchema") if isinstance(command.get("outputSchema"), dict) else {}
+            required = [name for name in schema.get("required", []) if isinstance(name, str)]
+            declared = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+            optional = sorted(name for name in declared if name not in required)
+            base = ["completion", "install", shell, "--format", "jsonl", "--non-interactive"]
+            if required and required[0] in body["data"]:
+                shown = program.run(*base, "--field", required[0], env=env)
+                report.add(f"completion install {shell}: --field of a member outputSchema requires is rendered",
+                           shown.returncode == 0 and shown.stdout == field_jsonl(body["data"][required[0]]),
+                           f"--field {required[0]}: exit {shown.returncode}, stdout {shown.stdout[:80]!r}, "
+                           f"stderr {shown.stderr[:120]!r}")
+            else:
+                report.skip(f"completion install {shell}: --field of a member outputSchema requires is rendered",
+                            "outputSchema requires no member, so the command accepts no --field")
+            root = os.path.realpath(home)
+            paths = [entry.get("path") for entry in body["data"].get("files", []) if isinstance(entry, dict)]
+            if issues or not paths or not all(isinstance(path, str) and os.path.realpath(path).startswith(root + os.sep)
+                                              for path in paths):
+                report.skip(f"completion install {shell}: --apply with a --field it cannot accept writes nothing",
+                            "the plan names no path, or one outside the home the kit made: --apply is not run")
+                continue
+            for name in ["no-such-member"] + optional[:1]:
+                kind = "optional in" if name in declared else "absent from"
+                refused = program.run(*base, "--apply", "--field", name, env=env)
+                written = sorted(tree(home))
+                check_failure(report, f"completion install {shell}: --apply with --field {name}, {kind} outputSchema, "
+                              "fails with VALIDATION_FAILED", refused, "VALIDATION_FAILED")
+                report.add(f"completion install {shell}: --apply with a --field it cannot accept writes nothing "
+                           f"({name})", not written, f"wrote {written[:4]}")
+                if written:
+                    shutil.rmtree(home)
+                    home.mkdir()
 
 
 def trunk_shape(item: dict, expected: dict | None) -> bool:
@@ -1127,7 +1161,11 @@ def main(argv: list[str]) -> int:
                                         "completion after a delegate's pattern inside a shell, and whether a "
                                         "program adds words of its own to its delegate's",
                                         "whether an installed completion script is stale after an upgrade",
-                                        "the writes of `completion install --apply`: the kit runs the plan only"]}}
+                                        "the writes of `completion install --apply`: the kit runs the plan, and "
+                                        "`--apply` only with a `--field` the program must refuse before it writes",
+                                        "a refusal to render after a write on any other command, and a format "
+                                        "the environment selects",
+                                        "a failure in the middle of a `jsonl` rendering"]}}
     if report_path:
         try:
             report_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")

@@ -268,6 +268,17 @@ half of one is worse than none. A name `data` does not carry fails with
 `VALIDATION_FAILED`, never an empty output, because a silent empty result in
 a pipe is the costliest failure mode.
 
+A refusal to render MUST NOT follow a write: a caller that reads
+`VALIDATION_FAILED` concludes that nothing changed. On a command that may
+write, that is a transaction, with or without `--apply`, and an `execute`
+command, the name is therefore checked before the command runs, and against
+the catalog: `NAME` MUST be listed in the top-level `required` of the
+command's `outputSchema`, and any other name fails with `VALIDATION_FAILED`
+while nothing has been written. A member the schema leaves optional is
+refused there even when this run would have carried it: what such a command
+accepts is read in the catalog, never in the result. A `read` command may
+decide on `data`, a refusal costing nothing there.
+
 In text mode the member is rendered by the pipe rules of section 7. An array
 whose every element is an object gives one row per object, the columns being
 the sorted union of their top-level member names; any other array gives one
@@ -293,6 +304,10 @@ together with `--field`. A
 MAY honor an environment variable that selects the default format
 (`MAELYS_CLI_FORMAT` in the Maelys implementations), so that an agent obtains
 a JSON failure envelope from a stream command whose stdout it cannot touch.
+What the environment selects is known before the command runs: a refusal it
+causes, `--field` against a default of `json` for one, is a rendering
+constraint of section 8 and is reported then, never after the command has
+run.
 
 ## 6. Built-in commands
 
@@ -401,6 +416,12 @@ stderr. A validation that found violations (exit `2`, section 8) is a
 success: its verdict is data, on stdout in every format. stderr carries what
 accompanies the run, failure envelopes and, in text mode, the progress and
 the details of `--progress` and `--verbose` (section 5), never the result.
+
+A failure leaves stdout empty in every format, `jsonl` included. A command
+writes no record before it knows that it succeeded, so a consumer never has
+to tell a whole result from the beginning of one. Output that must flow while
+the work runs belongs to a `protocol-stream` command (section 9), not to a
+`json-records` one.
 
 ## 8. Exit codes and error codes
 

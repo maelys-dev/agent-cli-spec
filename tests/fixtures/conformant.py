@@ -136,6 +136,11 @@ CATALOG.append(command("completion.install", ["completion", "install"], "complet
                        [{"name": "SHELL", "required": True, "variadic": False, "summary": "Shell.", "type": "choice",
                          "choices": ["bash", "zsh", "fish"]}],
                        [option("--apply", "Write the script and the startup block.")]))
+CATALOG[-1]["outputSchema"] = {"type": "object", "required": ["mode", "shell", "files", "catalog", "activate"],
+                               "properties": {"changed": {"type": "boolean"}}}
+for transaction in ("note.write", "note.commit"):
+    next(item for item in CATALOG if item["id"] == transaction)["outputSchema"] = {
+        "type": "object", "required": ["mode", "changed"]}
 
 offline = command("offline", ["offline"], "offline", "Unavailable in this build.", "read")
 offline.update(available=False, unavailableReason="fixture build has no offline backend")
@@ -513,6 +518,15 @@ def main(argv):
             return fail(selected["id"], "VALIDATION_FAILED", f"Invalid choice for {name}.", fmt, compact)
     if "--field" in options and fmt == "json":
         return fail(selected["id"], "VALIDATION_FAILED", "--field is not available with --format json.", fmt, compact)
+    if "--field" in options and selected["effect"] != "read" and BREAK != "field-after-write":
+        # Section 5: a command that may write decides on --field before it runs, and from the catalog.
+        schema = selected.get("outputSchema", {})
+        accepted = schema.get("required", []) + (list(schema.get("properties", {}))
+                                                 if BREAK == "field-optional-after-write" else [])
+        if options["--field"] not in accepted:
+            return fail(selected["id"], "VALIDATION_FAILED",
+                        f"--field accepts a member '{selected['id']}' always returns: {', '.join(accepted) or 'none'}.",
+                        fmt, compact)
     if selected["id"] == "describe" and "--prefix" in options:
         prefix = options["--prefix"]
         if not options.get("--summary"):

@@ -204,6 +204,8 @@ class KitTest(unittest.TestCase):
                                  ("delegate-format-drift", "the same in every format"),
                                  ("identifier-unavailable", "no hidden or unavailable identifier"),
                                  ("install-plan-writes", "the plan writes nothing"),
+                                 ("field-after-write", "it cannot accept writes nothing (no-such-member)"),
+                                 ("field-optional-after-write", "it cannot accept writes nothing (changed)"),
                                  ("install-plan-no-paths", "completion-install.json"),
                                  ("completion-tty-writes", "on a terminal writes nothing"),
                                  ("completion-stale-word", "offers the words of __complete"),
