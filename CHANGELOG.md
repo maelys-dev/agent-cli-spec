@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.10.0 — 2026-10-07
 
 - **What a delegate is.** The effects table said `stream` reserves stdio "for
   a declared protocol", while sections 2 and 9 allow a command that relays a
