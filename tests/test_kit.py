@@ -185,6 +185,8 @@ class KitTest(unittest.TestCase):
     def test_broken_fixtures_fail(self) -> None:
         for defect, expected in (("exit-codes", "matches schemas/describe.json"),
                                  ("extra-member", "matches schemas/describe.json"),
+                                 ("delegate-stream", "matches schemas/describe.json"),
+                                 ("delegate-protocol", "matches schemas/describe.json"),
                                  ("code-drift", "INVALID_COMMAND"),
                                  ("hidden-leak", "hidden option"),
                                  ("text-on-stderr", "text success"),

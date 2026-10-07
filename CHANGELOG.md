@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- **What a delegate is.** The effects table said `stream` reserves stdio "for
+  a declared protocol", while sections 2 and 9 allow a command that relays a
+  child's stdio and declares none; and `external` said only "hands over to
+  another executable", which fits every command that starts a program. The
+  text now gives the criterion maelys-cli's two implementations already
+  apply: a command is a delegate, `external: true`, when the catalog does not
+  own what follows its pattern, the words, the help and the completion there
+  being the other executable's. A command that keeps its own grammar and
+  relays the stdio of a child it starts is a `stream` command with `external:
+  false`, whether it names the child or receives it as an operand. The
+  effects table says so for `stream`.
+- **A delegate declares the effect `execute` and no `protocol`**, and
+  `schemas/describe.json` requires it. No catalog known to this repository
+  moves: maelys-cli's frameworks cannot declare a delegate otherwise, and its
+  example here already conforms. A program that declared a delegate with
+  another effect or with a protocol fails the schema from this version, hence
+  a minor. Two defects of the fixture (`delegate-stream`, `delegate-protocol`)
+  prove the rule.
+- A proposal to make every command that hands its stdio to another executable
+  a delegate was considered and dropped: measured on maelys-cli, it would
+  change what `--help`, the options and the completion of such a command do,
+  and it would break a product whose `stream` command has options of its own.
+
 ## 2.9.0 — 2026-10-06
 
 Two guarantees about what a caller may conclude from a failure, and a way to

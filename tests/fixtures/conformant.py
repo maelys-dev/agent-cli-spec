@@ -157,6 +157,10 @@ if BREAK == "exit-codes":
     CATALOG[1]["exitCodes"] = {"0": "command completed"}
 if BREAK == "extra-member":
     CATALOG[1]["repository"] = "none"
+if BREAK == "delegate-stream":
+    next(item for item in CATALOG if item["external"])["effect"] = "stream"
+if BREAK == "delegate-protocol":
+    next(item for item in CATALOG if item["external"])["protocol"] = "mcp-json-rpc"
 if BREAK == "hidden-leak":
     CATALOG[2]["usage"] = CATALOG[2]["input"]["synopsis"] = CATALOG[2]["usage"] + " [--trace]"
 if BREAK == "missing-output-schema":
