@@ -174,7 +174,8 @@
         {"if": {"properties": {"effect": {"const": "stream"}}},
          "then": {"properties": {"outputMode": {"const": "protocol-stream"}}}},
         {"if": {"properties": {"external": {"const": true}}},
-         "then": {"properties": {"outputMode": {"const": "protocol-stream"}}}}
+         "then": {"properties": {"outputMode": {"const": "protocol-stream"}, "effect": {"const": "execute"}},
+                  "not": {"required": ["protocol"]}}}
       ],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z][a-z0-9.-]*$"},

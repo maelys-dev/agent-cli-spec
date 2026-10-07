@@ -86,7 +86,7 @@ an invocation from `input`, never from help text.
 | `effect` | one effect of section 4, or `{"plan": "preview", "apply": "apply"}` / `{"plan": "preview", "apply": "commit"}` for a transaction |
 | `outputMode` | `json-envelope`, `json-records` or `protocol-stream` |
 | `protocol` | the named protocol owning stdio (`git-smart`, `mcp-json-rpc`), when a `protocol-stream` command declares one; a command that merely relays a child's stdio declares none |
-| `external` | `true` when the command hands over to another executable |
+| `external` | `true` when the catalog does not own what follows the pattern: those words are handed verbatim to another executable (section 9). Such a command, a delegate, declares the effect `execute` and no `protocol` |
 | `hidden` | `true` when the command is not shown to humans |
 | `available` | `false` when this build cannot run the command; then `unavailableReason` says why |
 | `input` | `synopsis`, `operands`, `options`, `constraints`, `passthrough` |
@@ -176,7 +176,7 @@ by hand.
 | `apply` | Applies a reviewed transaction. | Yes |
 | `commit` | Records a reviewed version-control commit. | Yes |
 | `execute` | Deliberately runs a non-transactional action. | Per action |
-| `stream` | Reserves stdio for a declared protocol. | Per protocol |
+| `stream` | Reserves stdio for a declared protocol, or for a child whose stdio the command relays. | Per protocol or child |
 
 A transaction declares the two-phase effect and an `--apply` option. Without
 `--apply` it returns `data.mode: "plan"` and writes nothing; with `--apply` it
@@ -499,6 +499,17 @@ never inject banners, progress or JSON into their stdout, and declare
 identifies it through `protocol`; a command merely relaying a child's stdio
 declares none, as section 2 says. A delegate receives every argument after its pattern
 verbatim, including `--help`, and owns its exit code.
+
+What makes a delegate is not that the command starts another program, but
+that the catalog does not own what follows the pattern: the words, the help
+and the completion there are the other executable's. A command that keeps its
+own grammar, options the program parses, its own `--help`, operands it types,
+and relays the stdio of a child it starts is a `stream` command with
+`external: false`, whether it names the child or receives it as an operand:
+the program still answers for the command line, and `__complete` after its
+pattern returns the program's words. A delegate declares the effect
+`execute`, the action being the other executable's, and no `protocol`, a
+protocol being what a program implements itself.
 
 `__complete` after a delegate's pattern returns the words the delegate's own
 completion returns, the same in every format, or none when it has none or is
