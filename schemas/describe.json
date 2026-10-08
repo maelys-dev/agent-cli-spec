@@ -48,7 +48,7 @@
     {
       "if": {"properties": {"kind": {"const": "summary"}}},
       "then": {"properties": {"commands": {"items": {"not": {"anyOf": [
-        {"required": ["outputSchema"]}, {"required": ["exitCodes"]}
+        {"required": ["outputSchema"]}, {"required": ["exitCodes"]}, {"required": ["examples"]}
       ]}}}}}
     },
     {

@@ -187,6 +187,8 @@ class KitTest(unittest.TestCase):
                                  ("extra-member", "matches schemas/describe.json"),
                                  ("delegate-stream", "matches schemas/describe.json"),
                                  ("help-runs", "version --help gives the help of version"),
+                                 ("help-names-command", "the envelope names help"),
+                                 ("summary-examples", "describe --summary envelope data matches schemas/describe.json"),
                                  ("help-runs", "--apply --help writes nothing"),
                                  ("example-unknown-option", "note.write: every example is an invocation"),
                                  ("example-missing-operand", "note.write: every example is an invocation"),

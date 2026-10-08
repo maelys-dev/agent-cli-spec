@@ -45,9 +45,11 @@ PROGRAM describe COMMAND_ID --format json       # one descriptor
 | `globalOptions`, `invariants`, `output` | the catalog form only |
 | `filter` | the filtered-summary selection, present only with `--summary --prefix PREFIX` |
 
-`describe --summary` omits `outputSchema` and `exitCodes` from each
-descriptor. `describe COMMAND_ID` returns exactly the catalog's descriptor of
-that identifier, and fails with `INVALID_COMMAND` for an unknown one. The
+`describe --summary` omits `outputSchema`, `exitCodes` and `examples` from
+each descriptor: it is the form an agent reads to choose a command, and what
+it omits serves once the command is chosen. `describe COMMAND_ID` returns
+exactly the catalog's descriptor of that identifier, and fails with
+`INVALID_COMMAND` for an unknown one. The
 catalog form carries `globalOptions`, `invariants` and `output`, and every
 descriptor of the catalog and of the command form carries `outputSchema` and
 `exitCodes`; the summary and command forms MUST NOT carry the three catalog
@@ -168,8 +170,8 @@ refuses it as it refuses any other. After the pattern of a delegate or of a
 Nothing runs an example: a program validates its examples by parsing them,
 and the conformance kit by reading the catalog. `help COMMAND_ID` SHOULD show
 them. Examples exist in READMEs and drift there; a declared one cannot name
-an option the command has lost. The member is optional and travels in every
-form of `describe`.
+an option the command has lost. The member is optional; the catalog and the
+command form carry it, the summary does not (section 1).
 
 ## 3. Value kinds
 
@@ -380,7 +382,11 @@ run.
 `--help` after the words of a command gives the help of that command, as
 `help COMMAND_ID` does, and the command does not run, whatever else the line
 carries, `--apply` included: asking how a command is used never performs it.
-A `passthrough` command and a delegate receive `--help` verbatim (sections 2
+The envelope then names `help`, the command whose data it carries: that
+`data` is the help's and would not validate against the `outputSchema` of the
+command asked about. A line that fails instead, on an option the command does
+not have for one, names the command it resolved, as any failure does. A
+`passthrough` command and a delegate receive `--help` verbatim (sections 2
 and 9).
 
 `completion SHELL` prints the script and writes nothing; in text mode the
