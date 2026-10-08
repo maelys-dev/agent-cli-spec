@@ -613,7 +613,10 @@ def main(argv):
                                                  for item in target["input"]["options"] if offered(item))
             text += "".join(f"  {PROGRAM} {' '.join(shlex.quote(word) for word in example['words'])}  {example['summary']}\n"
                             for example in target.get("examples", []))
-        data = {"text": text, "commands": [item["id"] for item in CATALOG if not item["hidden"]]}
+        # Section 6: `commands` names what the text shows, the one command asked or every listed one.
+        one = operands[:1] if operands and operands[0] in by_id and BREAK != "help-lists-all" else None
+        data = {"text": text, "commands": one or [item["id"] for item in CATALOG
+                                                  if not item["hidden"] or BREAK == "help-lists-hidden"]}
     elif identifier == "describe":
         data = {"schemaVersion": 1, "program": PROGRAM, "product": "Conformant", "version": "1.0.0",
                 "contract": "agent-cli/v2", "cliApi": 1, "framework": "fixture"}

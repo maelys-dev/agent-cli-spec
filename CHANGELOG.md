@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- **In the data of `help`, `commands` names the commands the text shows**
+  (section 6): every command it lists for `help`, the one asked for `help
+  COMMAND_ID` and for `--help` after a command, and never a hidden one. The
+  text said only `{"text": ..., "commands": [ids]}`, and this repository's
+  fixture returned every command whatever was asked. Since 2.12.0 the
+  envelope names `help` under `--help`, so `commands` is the only place where
+  the answer says which command it is about; an agent goes from there to
+  `describe COMMAND_ID` without reading `text`. Asked by maelys-cli, whose two
+  implementations already answer so. The kit checks `help`, `help version`
+  and `version --help`. **A program that lists every command for `help
+  COMMAND_ID` fails from this version.** A help the contract does not
+  describe, one for a command namespace or for a topic, follows the same
+  sentence and is not checked.
+- Two defects of the fixture (`help-lists-all`, `help-lists-hidden`) prove the
+  checks.
+
 ## 2.12.0 — 2026-10-08
 
 Two answers from maelys-cli to the points 2.11.0 left open, received after
