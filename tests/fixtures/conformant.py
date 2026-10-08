@@ -584,8 +584,11 @@ def main(argv):
         return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
     if options.get("--help") is True and selected["id"] != "help" and not selected["input"]["passthrough"] \
             and BREAK != "help-runs":
-        # Section 6: --help after a command gives its help, and the command does not run.
+        # Section 6: --help after a command gives its help, and the command does not run. The envelope names help.
+        named = selected["id"] if BREAK == "help-names-command" else "help"
         operands, selected = [selected["id"]], by_id["help"]
+    else:
+        named = selected["id"]
     identifier = selected["id"]
     verbose = options.get("--verbose", False)
     progress = options.get("--progress", "auto")
@@ -628,7 +631,8 @@ def main(argv):
                     return fail("describe", "INVALID_COMMAND", f"Unknown command prefix {prefix!r}.", fmt, compact)
                 data["filter"] = {"kind": "command-prefix", "value": prefix}
             data["kind"] = "summary"
-            data["commands"] = [{key: value for key, value in item.items() if key not in ("outputSchema", "exitCodes")}
+            omitted = ("outputSchema", "exitCodes") + (() if BREAK == "summary-examples" else ("examples",))
+            data["commands"] = [{key: value for key, value in item.items() if key not in omitted}
                                 for item in selected_commands]
         else:
             data.update({"kind": "catalog", "globalOptions": GLOBAL_OPTIONS, "invariants": ["one catalog"],
@@ -724,7 +728,7 @@ def main(argv):
         for record in emitted:
             sys.stdout.write("not-json\n" if BREAK == "malformed-jsonl" else json.dumps(record, separators=(",", ":")) + "\n")
     else:
-        sys.stdout.write(envelope(identifier, True, 0, data, compact))
+        sys.stdout.write(envelope(named, True, 0, data, compact))
     return 0
 
 

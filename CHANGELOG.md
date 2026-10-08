@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+Two answers from maelys-cli to the points 2.11.0 left open, received after
+its tag. No implementation had adopted 2.11.0 yet.
+
+- **`describe --summary` omits `examples`**, as it omits `outputSchema` and
+  `exitCodes` (sections 1 and 2); 2.11.0 put them in every form. The summary
+  is the form an agent reads to choose a command, and an example serves once
+  the command is chosen, in `describe COMMAND_ID`. Measured by maelys-cli on
+  its example program, the summary weighs 18 kilobytes against 31 for the
+  catalog; it estimates two examples per command at about a third more.
+  `schemas/describe.json` forbids the member in a summary, and the kit checks
+  it. **A program that put examples in its summary, as 2.11.0 said, fails
+  from this version.**
+- **Under `--help` after a command, the envelope names `help`** (section 6).
+  2.11.0 left it open, and two implementations answered differently, one
+  with `help`, one with the command asked about. `command` says how to read
+  `data`, and that `data` is the help's: it would not validate against the
+  `outputSchema` of the command asked about. A line that fails instead names
+  the command it resolved, as any failure does. The kit checks it on `version
+  --help`. **A program that names the command asked about fails from this
+  version.**
+- The kit's own expectation of an envelope's `command` follows: for a
+  successful line that carries `--help` after a command which is neither a
+  delegate nor `passthrough`, it expects `help`.
+- Two defects of the fixture (`summary-examples`, `help-names-command`) prove
+  the checks.
+
 ## 2.11.0 — 2026-10-08
 
 Asked by maelys-cli, which is rebuilding the help its framework renders.

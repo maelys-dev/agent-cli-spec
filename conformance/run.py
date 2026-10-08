@@ -100,6 +100,7 @@ class Report:
         self.output_schemas: dict[str, dict] = {}
         self.output_modes: dict[str, str] = {}
         self.patterns = dict(BUILT_INS)
+        self.verbatim: set[str] = set()
 
     def add(self, name: str, passed: bool, detail: str = "") -> bool:
         self.checks.append({"name": name, "passed": passed, "detail": detail})
@@ -149,6 +150,9 @@ def envelope(report: Report, name: str, completed: subprocess.CompletedProcess, 
         matches = [(len(pattern), identifier) for identifier, pattern in report.patterns.items()
                    if list(arguments[:len(pattern)]) == pattern]
         expected = max(matches)[1] if matches else {"--help": "help", "--version": "version"}.get(arguments[0], "unknown")
+        before = list(arguments[:list(arguments).index("--")]) if "--" in arguments else list(arguments)
+        if expect_ok and matches and "--help" in before and expected not in report.verbatim:
+            expected = "help"  # section 6: the help a command line gives is named help; its failure, the command
         if not report.add(f"{name}: envelope identifies the invoked command", body["command"] == expected,
                           f"command {body['command']!r}, expected {expected!r}"):
             return None
@@ -969,6 +973,8 @@ def _run_kit(program: Program, report: Report) -> Report:
     by_id = {command["id"]: command for command in commands}
     report.patterns = {identifier: command["pattern"] for identifier, command in by_id.items()}
     report.output_modes = {identifier: command["outputMode"] for identifier, command in by_id.items()}
+    report.verbatim = {identifier for identifier, command in by_id.items()
+                       if command.get("external") or command.get("input", {}).get("passthrough")}
     for identifier, command in by_id.items():
         try:
             unknown = unsupported_keywords(command["outputSchema"])
@@ -1078,6 +1084,8 @@ def _run_kit(program: Program, report: Report) -> Report:
                    [command.get("id") for command in data.get("commands", [])] == list(by_id))
         report.add("describe --summary omits schemas and exit codes",
                    not any("outputSchema" in command or "exitCodes" in command for command in data.get("commands", [])))
+        report.add("describe --summary omits examples",
+                   not any("examples" in command for command in data.get("commands", [])))
         report.add("--compact renders one line", summary.stdout.count("\n") <= 1)
     describe_options = {item.get("long"): item for item in by_id.get("describe", {}).get("input", {}).get("options", [])}
     prefix_option = describe_options.get("--prefix", {})
@@ -1107,6 +1115,8 @@ def _run_kit(program: Program, report: Report) -> Report:
                        [item.get("id") for item in data.get("commands", [])] == expected)
             report.add("describe filtered summary omits schemas and exit codes",
                        not any("outputSchema" in item or "exitCodes" in item for item in data.get("commands", [])))
+            report.add("describe filtered summary omits examples",
+                       not any("examples" in item for item in data.get("commands", [])))
             report.add("describe filtered summary omits catalog-only members",
                        not any(key in data for key in ("globalOptions", "invariants", "output")))
         check_failure(report, "describe --prefix of a known prefix without --summary fails with VALIDATION_FAILED",
@@ -1214,9 +1224,12 @@ def _run_kit(program: Program, report: Report) -> Report:
         # ---- --help after a command gives its help, and the command does not run (section 6) ----
         asked = program.run("version", "--help", "--format", "json", "--non-interactive")
         try:
-            shown = parse_json(asked.stdout).get("data", {}) if asked.returncode == 0 else {}
+            answer = parse_json(asked.stdout) if asked.returncode == 0 else {}
+            shown = answer.get("data", {})
         except (ValueError, AttributeError):
-            shown = {}
+            answer, shown = {}, {}
+        report.add("version --help: the envelope names help, whose data it carries", answer.get("command") == "help",
+                   f"command {answer.get('command')!r}")
         report.add("version --help gives the help of version, not the identity of the product",
                    isinstance(shown, dict) and isinstance(shown.get("text"), str) and "version" not in shown,
                    f"exit {asked.returncode}, data members {sorted(shown) if isinstance(shown, dict) else shown!r}")
