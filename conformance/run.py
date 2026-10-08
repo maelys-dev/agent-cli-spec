@@ -28,7 +28,7 @@ import tempfile
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from validate import json_equal, unsupported_keywords, validate  # noqa: E402
+from validate import compile_pattern, json_equal, unsupported_keywords, validate  # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 SCHEMAS = {name: json.loads((HERE.parent / "schemas" / f"{name}.json").read_text(encoding="utf-8"))
@@ -293,6 +293,128 @@ def check_failure(report: Report, name: str, completed: subprocess.CompletedProc
         return
     got = body["error"]["code"]
     report.add(name, got == code, "" if got == code else f"code {got}, expected {code}")
+
+
+def value_problem(declaration: dict, value: str) -> str:
+    """Why a value is not of the kind its declaration gives, or "". Only what section 3 fixes is judged: a kind
+    whose grammar the contract leaves to the implementation (`size`, `duration`, `hex`) is accepted when non-empty."""
+    kind = declaration.get("type")
+    if value == "":
+        return "an empty value"
+    if declaration.get("choices") and value not in declaration["choices"]:
+        return f"{value!r} is not among {declaration['choices']}"
+    if kind == "boolean" and value not in ("true", "false"):
+        return f"{value!r} is not true or false"
+    if kind in ("integer", "unsigned"):
+        if re.fullmatch(r"\d+" if kind == "unsigned" else r"-?\d+", value) is None:
+            return f"{value!r} is not {'an unsigned' if kind == 'unsigned' else 'an'} integer"
+        number = int(value)
+        for bound, beyond in (("minimum", number < declaration.get("minimum", number)),
+                              ("maximum", number > declaration.get("maximum", number))):
+            if beyond:
+                return f"{value} is beyond the {bound} {declaration[bound]}"
+    if kind == "absolute-path" and not value.startswith("/"):
+        return f"{value!r} is not an absolute path"
+    if kind == "sha256" and re.fullmatch(r"[0-9a-fA-F]{64}", value) is None:
+        return f"{value!r} is not 64 hexadecimal digits"
+    if kind == "digest":
+        algorithm, colon, digits = value.partition(":")
+        widths = declaration.get("digits")
+        widths = [widths] if isinstance(widths, int) else widths
+        if not colon or algorithm not in declaration.get("algorithms", [algorithm]) \
+                or re.fullmatch(r"[0-9a-fA-F]+", digits) is None or (widths and len(digits) not in widths):
+            return f"{value!r} is not a digest of {declaration.get('algorithms')}"
+    if kind in ("string", "path") and isinstance(declaration.get("pattern"), str):
+        try:
+            if compile_pattern(declaration["pattern"]).search(value) is None:
+                return f"{value!r} does not match {declaration['pattern']}"
+        except re.error:
+            pass
+    return ""
+
+
+def example_issues(command: dict, global_options: list[dict], words: list[str]) -> list[str]:
+    """Section 2: why an example is not an invocation the command accepts, read from the catalog alone.
+    Nothing is run. After a delegate's or a passthrough pattern the words are not the catalog's to check."""
+    pattern = command["pattern"]
+    if words[:len(pattern)] != pattern:
+        return [f"does not start with the pattern {' '.join(pattern)!r}"]
+    if command.get("external") or command["input"].get("passthrough"):
+        return []
+    own = {item["long"]: item for item in command["input"]["options"]}
+    declared = {**{item["long"]: item for item in global_options}, **own}
+    issues: list[str] = []
+    given: dict[str, int] = {}
+    operands: list[str] = []
+    rest = words[len(pattern):]
+    index = 0
+    while index < len(rest):
+        word = rest[index]
+        index += 1
+        if word == "--":
+            operands += rest[index:]
+            break
+        if not word.startswith("--"):
+            operands.append(word)
+            continue
+        name, equals, value = word.partition("=")
+        option = declared.get(name)
+        if option is None:
+            issues.append(f"{name} is not an option of the command")
+            continue
+        if option.get("hidden") is True:
+            issues.append(f"{name} is hidden")
+        given[name] = given.get(name, 0) + 1
+        argument = option.get("argument")
+        if argument:
+            if not equals:
+                if index >= len(rest):
+                    issues.append(f"{name} has no value")
+                    continue
+                value = rest[index]
+                index += 1
+            problem = value_problem(argument, value)
+            if problem:
+                issues.append(f"{name}: {problem}")
+        elif equals and value not in ("true", "false"):
+            issues.append(f"{name} is a flag and takes true or false")
+    for name, count in given.items():
+        option = declared[name]
+        if count > 1 and not option.get("repeatable"):
+            issues.append(f"{name} is given {count} times and is not repeatable")
+        issues += [f"{name} requires {entry}" for entry in option.get("requires", []) if entry not in given]
+    positions = {item["name"]: place for place, item in enumerate(command["input"]["operands"])}
+    for name in given:
+        for entry in declared[name].get("conflictsWith", []):
+            if entry in given if entry.startswith("--") else positions.get(entry, len(operands)) < len(operands):
+                issues.append(f"{name} conflicts with {entry}")
+    issues += [f"{name} is required" for name, option in own.items() if option.get("required") and name not in given]
+    groups: dict[str, list[str]] = {}
+    for name, option in own.items():
+        if option.get("group"):
+            groups.setdefault(option["group"], []).append(name)
+    rules = [{"kind": "all-or-none", "options": names} for names in groups.values()] + command["input"]["constraints"]
+    for rule in rules:
+        names, present = rule["options"], [name for name in rule["options"] if name in given]
+        broken = {"requires": names[:1] == present[:1] and len(present) < len(names),
+                  "at-most-one": len(present) > 1, "exactly-one": len(present) != 1,
+                  "all-or-none": 0 < len(present) < len(names)}.get(rule["kind"], False)
+        if broken:
+            issues.append(f"{rule['kind']} of {names} does not hold with {present}")
+    expected = command["input"]["operands"]
+    needed = sum(1 for item in expected if item.get("required"))
+    variadic = bool(expected) and expected[-1].get("variadic") is True
+    if len(operands) < needed:
+        issues.append(f"{len(operands)} operands where {needed} are required")
+    if len(operands) > len(expected) and not variadic:
+        issues.append(f"{len(operands)} operands where at most {len(expected)} are accepted")
+    for place, value in enumerate(operands):
+        if expected and (place < len(expected) or variadic):
+            item = expected[min(place, len(expected) - 1)]
+            problem = value_problem(item, value)
+            if problem:
+                issues.append(f"{item['name']}: {problem}")
+    return sorted(set(issues))
 
 
 def hidden_option_invocation(item: dict) -> list[str] | None:
@@ -758,6 +880,13 @@ def check_completion_install(report: Report, program: Program, by_id: dict) -> N
                 report.skip(f"completion install {shell}: --apply with a --field it cannot accept writes nothing",
                             "the plan names no path, or one outside the home the kit made: --apply is not run")
                 continue
+            # ---- asking how a command is used never performs it (section 6) ----
+            program.run("completion", "install", shell, "--apply", "--help", "--non-interactive", env=env)
+            written = sorted(tree(home))
+            report.add(f"completion install {shell}: --apply --help writes nothing", not written, f"wrote {written[:4]}")
+            if written:
+                shutil.rmtree(home)
+                home.mkdir()
             for name in ["no-such-member"] + optional[:1]:
                 kind = "optional in" if name in declared else "absent from"
                 refused = program.run(*base, "--apply", "--field", name, env=env)
@@ -925,6 +1054,11 @@ def _run_kit(program: Program, report: Report) -> Report:
         report.add(f"{identifier}: at most the last operand is variadic",
                    not variadic or variadic == [len(command["input"]["operands"]) - 1])
         check_hidden_options(report, program, command)
+        wrong = [f"{' '.join(example['words'])}: {'; '.join(found)}" for example in command.get("examples", [])
+                 for found in [example_issues(command, catalog["globalOptions"], example["words"])] if found]
+        if command.get("examples"):
+            report.add(f"{identifier}: every example is an invocation the command accepts", not wrong,
+                       " | ".join(wrong)[:400])
         one = program.run("describe", identifier, "--format", "json", "--non-interactive")
         body = envelope(report, f"{identifier}: describe {identifier}", one, expect_ok=True)
         if body is not None:
@@ -1077,6 +1211,15 @@ def _run_kit(program: Program, report: Report) -> Report:
         help_alias = program.run("--help", "--format", "json")
         envelope(report, "--help envelope", help_alias, expect_ok=True)
         report.add("--help equals help", help_alias.stdout == help_run.stdout)
+        # ---- --help after a command gives its help, and the command does not run (section 6) ----
+        asked = program.run("version", "--help", "--format", "json", "--non-interactive")
+        try:
+            shown = parse_json(asked.stdout).get("data", {}) if asked.returncode == 0 else {}
+        except (ValueError, AttributeError):
+            shown = {}
+        report.add("version --help gives the help of version, not the identity of the product",
+                   isinstance(shown, dict) and isinstance(shown.get("text"), str) and "version" not in shown,
+                   f"exit {asked.returncode}, data members {sorted(shown) if isinstance(shown, dict) else shown!r}")
     for words in (("version",), ("help",), ("describe", "--summary")):
         text_run = program.run(*words, "--format", "text", "--non-interactive")
         report.add(f"text success of {' '.join(words)} is on stdout with stderr empty",
@@ -1218,7 +1361,11 @@ def main(argv: list[str]) -> int:
                                         "the environment selects",
                                         "whether a fingerprint covers the action and the state on a product's own "
                                         "transactions, and an `--apply --expect` that succeeds",
-                                        "a failure in the middle of a `jsonl` rendering"]}}
+                                        "a failure in the middle of a `jsonl` rendering",
+                                        "an example beyond its declared grammar: what the command checks itself, "
+                                        "the words after a delegate's or a passthrough pattern, a value of a kind "
+                                        "whose grammar the contract leaves open, and whether `help` shows it",
+                                        "`--help` after a command that may write, except `completion install`"]}}
     if report_path:
         try:
             report_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")

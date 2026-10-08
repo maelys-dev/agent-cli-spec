@@ -14,8 +14,8 @@ import unittest
 from support import FixtureProgram, ROOT
 
 sys.path.insert(0, str(ROOT / "conformance"))
-from run import (Program, Report, SCHEMAS, check_jsonl, envelope, field_jsonl, field_text, main, run_kit,
-                 run_on_terminal, text_records)
+from run import (Program, Report, SCHEMAS, check_jsonl, envelope, example_issues, field_jsonl, field_text, main,
+                 run_kit, run_on_terminal, text_records)
 from validate import json_equal, unsupported_keywords, validate
 
 
@@ -175,6 +175,62 @@ class KitRegressionTest(unittest.TestCase):
                 self.assertEqual(field_text(value), text)
                 self.assertEqual(fixture.field_text(value), text)
                 self.assertEqual(field_jsonl(value), lines)
+
+    def test_an_example_is_judged_from_the_catalog_alone(self):
+        """Section 2: every rule the catalog states about an invocation is applied to an example, and nothing runs."""
+        def option(long, **members):
+            return {"long": long, "required": False, "repeatable": False, "summary": "s", "requires": [],
+                    "conflictsWith": [], **members}
+        command = {"id": "push", "pattern": ["image", "push"], "external": False, "input": {
+            "passthrough": False,
+            "operands": [{"name": "TARGET", "required": True, "variadic": False, "type": "choice", "choices": ["a", "b"]},
+                         {"name": "COUNT", "required": False, "variadic": True, "type": "unsigned", "maximum": 9}],
+            "options": [option("--apply"), option("--secret", hidden=True),
+                        option("--to", required=True, argument={"name": "DIR", "type": "absolute-path"}),
+                        option("--tag", repeatable=True, argument={"name": "TAG", "type": "string", "pattern": "^v[0-9]+$"}),
+                        option("--sum", argument={"name": "SUM", "type": "digest", "algorithms": ["sha256"], "digits": 64}),
+                        option("--report", argument={"name": "FILE", "type": "path"}, requires=["--apply"]),
+                        option("--quiet", conflictsWith=["--report", "COUNT"]),
+                        option("--left", group="pair"), option("--right", group="pair"),
+                        option("--one"), option("--other")],
+            "constraints": [{"kind": "all-or-none", "options": ["--left", "--right"]},
+                            {"kind": "at-most-one", "options": ["--one", "--other"]}]}}
+        trunk = [option("--format", argument={"name": "FORMAT", "type": "choice", "choices": ["text", "json", "jsonl"]}),
+                 option("--non-interactive")]
+        base = ["image", "push", "a", "--to", "/srv"]
+        accepted = (base, base + ["3", "4"], base + ["--tag", "v1", "--tag=v2"], base + ["--format", "json"],
+                    base + ["--apply", "--report", "out.txt"], base + ["--left", "--right"], base + ["--apply=false"],
+                    base + ["--sum", "sha256:" + "0" * 64], ["image", "push", "--to", "/srv", "--", "a", "7"])
+        for words in accepted:
+            self.assertEqual(example_issues(command, trunk, words), [], words)
+        refused = ((["image", "pull", "a"], "pattern"), (["image", "push", "--to", "/srv"], "operands where 1"),
+                   (base + ["--force"], "--force is not an option"), (base + ["--secret"], "--secret is hidden"),
+                   (["image", "push", "c", "--to", "/srv"], "TARGET"), (["image", "push", "a"], "--to is required"),
+                   (["image", "push", "a", "--to", "srv"], "absolute path"), (base + ["--tag", "latest"], "does not match"),
+                   (base + ["--apply", "--apply"], "not repeatable"), (base + ["--report", "x"], "requires --apply"),
+                   (base + ["--quiet", "--apply", "--report", "x"], "conflicts with --report"),
+                   (base + ["--quiet", "3"], "conflicts with COUNT"), (base + ["--left"], "all-or-none"),
+                   (base + ["--one", "--other"], "at-most-one"), (base + ["12"], "beyond the maximum"),
+                   (base + ["--sum", "md5:00"], "digest"), (base + ["--format", "yaml"], "--format"),
+                   (base + ["--to"], "--to has no value"), (base + ["--apply=maybe"], "flag"))
+        for words, expected in refused:
+            found = example_issues(command, trunk, words)
+            self.assertTrue(any(expected in issue for issue in found), (words, found))
+        # after a delegate's or a passthrough pattern the words belong to another grammar
+        self.assertEqual(example_issues({**command, "external": True}, trunk, ["image", "push", "--anything"]), [])
+
+    def test_fixture_gives_help_and_does_not_run_when_help_is_asked(self):
+        """Section 6: --help after a command gives its help. Until 2.10.0 the fixture ran the command."""
+        program = FixtureProgram()
+        with tempfile.TemporaryDirectory(prefix="agent cli help ") as directory:
+            home = pathlib.Path(directory)
+            env = {"HOME": str(home), "XDG_DATA_HOME": "", "XDG_CONFIG_HOME": "", "ZDOTDIR": ""}
+            asked = program.run("completion", "install", "bash", "--apply", "--help", env=env)
+            self.assertEqual(asked.returncode, 0)
+            self.assertIn("completion install SHELL", asked.stdout)
+            self.assertEqual(list(home.iterdir()), [])
+        self.assertIn("conformant note write notes/today.txt --apply", program.run("help", "note.write").stdout)
+        self.assertNotIn("1.0.0", program.run("version", "--help").stdout)
 
     def test_fixture_refuses_a_field_before_it_writes(self):
         """Section 5: on a command that may write, --field is decided from the catalog before the command runs.

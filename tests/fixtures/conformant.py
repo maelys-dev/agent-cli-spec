@@ -150,6 +150,30 @@ for transaction in ("note.write", "note.commit"):
     next(item for item in CATALOG if item["id"] == transaction)["outputSchema"] = {
         "type": "object", "required": ["mode", "changed"]}
 
+EXAMPLES = {
+    "describe": [{"words": ["describe", "--summary", "--prefix", "note"], "summary": "List the note commands."},
+                 {"words": ["describe", "note.write", "--format", "json"], "summary": "Describe one command."}],
+    "note.write": [{"words": ["note", "write", "notes/today.txt"], "summary": "Plan the note."},
+                   {"words": ["note", "write", "notes/today.txt", "--apply"], "summary": "Write the note.",
+                    "x-since": "2.11.0"}],
+    "completion.install": [{"words": ["completion", "install", "zsh", "--apply", "--expect", "sha256:" + "ab" * 32],
+                            "summary": "Install the completion the plan showed."}],
+    "tool": [{"words": ["tool", "--version"], "summary": "Ask the child its version."}],
+}
+if BREAK == "example-unknown-option":
+    EXAMPLES["note.write"][1]["words"].append("--force")
+if BREAK == "example-missing-operand":
+    EXAMPLES["note.write"][0]["words"].pop()
+if BREAK == "example-bad-choice":
+    EXAMPLES["completion.install"][0]["words"][2] = "tcsh"
+if BREAK == "example-unmet-requires":
+    EXAMPLES["describe"][0]["words"].remove("--summary")
+if BREAK == "example-other-command":
+    EXAMPLES["note.write"][0]["words"][1] = "commit"
+for item in CATALOG:
+    if item["id"] in EXAMPLES:
+        item["examples"] = EXAMPLES[item["id"]]
+
 offline = command("offline", ["offline"], "offline", "Unavailable in this build.", "read")
 offline.update(available=False, unavailableReason="fixture build has no offline backend")
 CATALOG.append(offline)
@@ -558,6 +582,10 @@ def main(argv):
             return fail("describe", "VALIDATION_FAILED", "--prefix is not a valid command prefix.", fmt, compact)
     if fmt == "jsonl" and selected["outputMode"] != "json-records" and "--field" not in options:
         return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
+    if options.get("--help") is True and selected["id"] != "help" and not selected["input"]["passthrough"] \
+            and BREAK != "help-runs":
+        # Section 6: --help after a command gives its help, and the command does not run.
+        operands, selected = [selected["id"]], by_id["help"]
     identifier = selected["id"]
     verbose = options.get("--verbose", False)
     progress = options.get("--progress", "auto")
@@ -580,6 +608,8 @@ def main(argv):
             target = by_id[operands[0]]
             text = target["usage"] + "\n" + "".join(f"  {item['long']}  {item['summary']}\n"
                                                  for item in target["input"]["options"] if offered(item))
+            text += "".join(f"  {PROGRAM} {' '.join(shlex.quote(word) for word in example['words'])}  {example['summary']}\n"
+                            for example in target.get("examples", []))
         data = {"text": text, "commands": [item["id"] for item in CATALOG if not item["hidden"]]}
     elif identifier == "describe":
         data = {"schemaVersion": 1, "program": PROGRAM, "product": "Conformant", "version": "1.0.0",

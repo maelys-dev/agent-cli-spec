@@ -90,6 +90,7 @@ an invocation from `input`, never from help text.
 | `hidden` | `true` when the command is not shown to humans |
 | `available` | `false` when this build cannot run the command; then `unavailableReason` says why |
 | `input` | `synopsis`, `operands`, `options`, `constraints`, `passthrough` |
+| `examples` | invocations the command accepts, each `{"words": [...], "summary": ...}`; optional |
 | `outputSchema` | a JSON Schema of `data` on success |
 | `exitCodes` | exactly `{"0": "command completed", "1": "execution failed", "2": "valid report with violations"}` |
 
@@ -145,6 +146,30 @@ option level, so `input.constraints` is its only site. `all-or-none` is the
 one kind that MUST agree with the options, `group` being its option-level
 form: the options of an `all-or-none` entry are exactly the options sharing
 one `group`, and every `group` of a command has its entry.
+
+### Examples
+
+`examples` lists invocations of the command, for the reader of `help` and for
+an agent that learns a command faster from one real line than from its
+grammar. Each entry is `{"words": [...], "summary": "..."}`: `words` is the
+command line without the program's name, one word per element so that no
+quoting rule is needed, and it starts with the command's `pattern`; `summary`
+says in one sentence what that line does.
+
+An example MUST be an invocation the command accepts: every option is
+declared, for the command or globally, and is not hidden, an example being
+for humans as `help` is; every value has the kind its declaration gives; the
+operands satisfy the declared arity; `requires`, `conflictsWith`, `group` and
+`input.constraints` hold. It carries real values, never a placeholder. An
+example that does not parse is a wrong declaration, and an implementation
+refuses it as it refuses any other. After the pattern of a delegate or of a
+`passthrough` command the words are not the catalog's to check.
+
+Nothing runs an example: a program validates its examples by parsing them,
+and the conformance kit by reading the catalog. `help COMMAND_ID` SHOULD show
+them. Examples exist in READMEs and drift there; a declared one cannot name
+an option the command has lost. The member is optional and travels in every
+form of `describe`.
 
 ## 3. Value kinds
 
@@ -351,6 +376,12 @@ run.
 | `completion` | `completion bash\|zsh\|fish` | `{"shell": ..., "script": ...}`; text mode prints the script |
 | `complete.candidates` | `__complete -- WORDS...`, hidden, `json-records` | `{"count": N, "records": [{"word": ...}]}` |
 | `completion.install` | `completion install SHELL [--apply]`, reserved: offered or not | `mode`, `shell`, `files`, `catalog`, `activate` |
+
+`--help` after the words of a command gives the help of that command, as
+`help COMMAND_ID` does, and the command does not run, whatever else the line
+carries, `--apply` included: asking how a command is used never performs it.
+A `passthrough` command and a delegate receive `--help` verbatim (sections 2
+and 9).
 
 `completion SHELL` prints the script and writes nothing; in text mode the
 script alone, so that a shell loads it straight from the command (`source
