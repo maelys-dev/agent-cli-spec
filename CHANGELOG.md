@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+Asked by maelys-cli, which is rebuilding the help its framework renders.
+
+- **A command may declare examples** (section 2). `examples` is an optional
+  member of the descriptor, in every form of `describe`: entries `{"words":
+  [...], "summary": "..."}`, `words` being the command line without the
+  program's name, one word per element, starting with the command's
+  `pattern`. An example MUST be an invocation the command accepts: declared
+  options, none of them hidden, values of the declared kind, operands of the
+  declared arity, `requires`, `conflictsWith`, `group` and `input.constraints`
+  holding, and real values, never a placeholder. Examples live in READMEs
+  today and drift there; one product's README names two commands its
+  installed binary does not have. `help COMMAND_ID` SHOULD show them.
+- **Nothing runs an example.** The kit checks each one by reading the
+  catalog: it applies to the words every rule the catalog states. Running an
+  example with `--help` was considered and dropped, an example being free to
+  carry `--apply`. The kit does not judge what a command checks beyond its
+  declared grammar, the words after a delegate's or a `passthrough` pattern,
+  a value of a kind whose grammar the contract leaves open (`size`,
+  `duration`, `hex`), nor whether `help` shows an example; its report says
+  so.
+- **No category member.** A command namespace, the prefix `describe --summary
+  --prefix` selects, is the grouping: the largest catalog measured has 15
+  commands, and nothing could check a category.
+- **`--help` after the words of a command gives its help, and the command
+  does not run** (section 6), whatever else the line carries, `--apply`
+  included. The text said `--help` is "the help of the selected command" and
+  nothing more, and this repository's reference fixture ran the command:
+  `completion install bash --apply --help` installed the completion. The kit
+  now checks that `version --help` gives a help and not the identity of the
+  product, and that `completion install SHELL --apply --help` writes nothing
+  in a home the kit made. **A program that runs a command when `--help`
+  follows its words fails from this version.** A `passthrough` command and a
+  delegate receive `--help` verbatim, as before.
+- The fixture declares examples on four commands, shows them in `help
+  COMMAND_ID`, and gains six defects (`help-runs` and five `example-*`) that
+  prove the checks.
+
 ## 2.10.0 — 2026-10-07
 
 - **What a delegate is.** The effects table said `stream` reserves stdio "for

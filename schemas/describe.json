@@ -101,6 +101,16 @@
       "patternProperties": {"^x-": {}},
       "additionalProperties": false
     },
+    "example": {
+      "type": "object",
+      "required": ["words", "summary"],
+      "properties": {
+        "words": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "summary": {"type": "string", "minLength": 1}
+      },
+      "patternProperties": {"^x-": {}},
+      "additionalProperties": false
+    },
     "option": {
       "type": "object",
       "required": ["long", "required", "repeatable", "summary", "requires", "conflictsWith"],
@@ -190,6 +200,7 @@
         "available": {"type": "boolean"},
         "unavailableReason": {"type": "string", "minLength": 1},
         "input": {"$ref": "#/definitions/input"},
+        "examples": {"type": "array", "minItems": 1, "items": {"$ref": "#/definitions/example"}},
         "outputSchema": {"type": "object"},
         "exitCodes": {
           "type": "object",

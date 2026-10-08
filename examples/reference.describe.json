@@ -290,7 +290,27 @@
         "0": "command completed",
         "1": "execution failed",
         "2": "valid report with violations"
-      }
+      },
+      "examples": [
+        {
+          "words": [
+            "describe",
+            "--summary",
+            "--prefix",
+            "note"
+          ],
+          "summary": "List the note commands."
+        },
+        {
+          "words": [
+            "describe",
+            "note.write",
+            "--format",
+            "json"
+          ],
+          "summary": "Describe one command."
+        }
+      ]
     },
     {
       "id": "completion",
@@ -419,7 +439,27 @@
         "0": "command completed",
         "1": "execution failed",
         "2": "valid report with violations"
-      }
+      },
+      "examples": [
+        {
+          "words": [
+            "note",
+            "write",
+            "notes/today.txt"
+          ],
+          "summary": "Plan the note."
+        },
+        {
+          "words": [
+            "note",
+            "write",
+            "notes/today.txt",
+            "--apply"
+          ],
+          "summary": "Write the note.",
+          "x-since": "2.11.0"
+        }
+      ]
     },
     {
       "id": "limits",
@@ -766,7 +806,16 @@
         "0": "command completed",
         "1": "execution failed",
         "2": "valid report with violations"
-      }
+      },
+      "examples": [
+        {
+          "words": [
+            "tool",
+            "--version"
+          ],
+          "summary": "Ask the child its version."
+        }
+      ]
     },
     {
       "id": "note.commit",
@@ -913,7 +962,20 @@
         "0": "command completed",
         "1": "execution failed",
         "2": "valid report with violations"
-      }
+      },
+      "examples": [
+        {
+          "words": [
+            "completion",
+            "install",
+            "zsh",
+            "--apply",
+            "--expect",
+            "sha256:abababababababababababababababababababababababababababababababab"
+          ],
+          "summary": "Install the completion the plan showed."
+        }
+      ]
     },
     {
       "id": "offline",
