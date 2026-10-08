@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.12.0 — 2026-10-08
 
 Two answers from maelys-cli to the points 2.11.0 left open, received after
 its tag. No implementation had adopted 2.11.0 yet.
