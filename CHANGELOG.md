@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.11.0 — 2026-10-08
 
 Asked by maelys-cli, which is rebuilding the help its framework renders.
 
