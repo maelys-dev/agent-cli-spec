@@ -38,6 +38,8 @@ Asked by maelys-cli, which is rebuilding the help its framework renders.
 - The fixture declares examples on four commands, shows them in `help
   COMMAND_ID`, and gains six defects (`help-runs` and five `example-*`) that
   prove the checks.
+- Adopts maelys-release v0.63.0: two pinned workflows, nothing asked of this
+  repository.
 
 ## 2.10.0 — 2026-10-07
 
