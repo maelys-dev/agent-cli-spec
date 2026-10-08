@@ -1218,6 +1218,16 @@ def _run_kit(program: Program, report: Report) -> Report:
         data = body["data"]
         report.add("help data has text and commands",
                    isinstance(data.get("text"), str) and bool(data.get("text")) and isinstance(data.get("commands"), list))
+        # ---- `commands` names the commands the text shows (section 6) ----
+        listed = data.get("commands") if isinstance(data.get("commands"), list) else []
+        strangers = [item for item in listed if item not in by_id or by_id[item].get("hidden") is True]
+        report.add("help lists identifiers of the catalog, none of them hidden", not strangers, f"listed {strangers[:6]}")
+        about = program.run("help", "version", "--format", "json", "--non-interactive")
+        about_body = envelope(report, "help version envelope", about, expect_ok=True)
+        if about_body is not None:
+            report.add("help version names version alone in data.commands",
+                       about_body["data"].get("commands") == ["version"],
+                       f"commands {str(about_body['data'].get('commands'))[:120]}")
         help_alias = program.run("--help", "--format", "json")
         envelope(report, "--help envelope", help_alias, expect_ok=True)
         report.add("--help equals help", help_alias.stdout == help_run.stdout)
@@ -1233,6 +1243,9 @@ def _run_kit(program: Program, report: Report) -> Report:
         report.add("version --help gives the help of version, not the identity of the product",
                    isinstance(shown, dict) and isinstance(shown.get("text"), str) and "version" not in shown,
                    f"exit {asked.returncode}, data members {sorted(shown) if isinstance(shown, dict) else shown!r}")
+        report.add("version --help names version alone in data.commands",
+                   isinstance(shown, dict) and shown.get("commands") == ["version"],
+                   f"commands {str(shown.get('commands') if isinstance(shown, dict) else shown)[:120]}")
     for words in (("version",), ("help",), ("describe", "--summary")):
         text_run = program.run(*words, "--format", "text", "--non-interactive")
         report.add(f"text success of {' '.join(words)} is on stdout with stderr empty",

@@ -389,6 +389,13 @@ not have for one, names the command it resolved, as any failure does. A
 `passthrough` command and a delegate receive `--help` verbatim (sections 2
 and 9).
 
+In the data of `help`, `commands` lists the identifiers of the commands the
+text shows: every command it lists for `help`, the one asked for `help
+COMMAND_ID` and for `--help` after a command. An agent goes from a help to
+`describe COMMAND_ID` without reading `text`, and since the envelope names
+`help`, `commands` is where the answer says which command it is about. A
+hidden command is never among them.
+
 `completion SHELL` prints the script and writes nothing; in text mode the
 script alone, so that a shell loads it straight from the command (`source
 <(PROGRAM completion bash)`). The script depends on nothing but its shell,
