@@ -124,7 +124,8 @@ def issues_text(issues: list) -> str:
     return "; ".join(map(repr, issues[:6])) + (" ..." if len(issues) > 6 else "")
 
 
-def envelope(report: Report, name: str, completed: subprocess.CompletedProcess, expect_ok: bool) -> dict | None:
+def envelope(report: Report, name: str, completed: subprocess.CompletedProcess, expect_ok: bool,
+             judge_data: bool = True) -> dict | None:
     """Parse and validate an envelope; on failure, stdout must be empty."""
     stream, other = (completed.stdout, completed.stderr) if expect_ok else (completed.stderr, completed.stdout)
     try:
@@ -162,7 +163,7 @@ def envelope(report: Report, name: str, completed: subprocess.CompletedProcess, 
         schema_name = {"describe": "describe", "version": "version", "complete.candidates": "records"}.get(identifier)
         if report.output_modes.get(identifier) == "json-records":
             schema_name = "records"
-        if schema_name:
+        if schema_name and judge_data:
             issues = validate(body["data"], SCHEMAS[schema_name])
             if not report.add(f"{name} data matches schemas/{schema_name}.json", not issues, issues_text(issues)):
                 return None
@@ -797,7 +798,9 @@ def check_completion_scripts(report: Report, program: Program, catalog: dict, co
                     report.add(f"completion {label}: the script falls back to file completion when __complete returns nothing",
                                not unanswered, "; ".join(unanswered[:3]))
                 if not differing and compared > 0 and launches == 0:
-                    carried = str(catalog.get("version", "")) != "" and str(catalog.get("version")) in script
+                    version = str(catalog.get("version", ""))
+                    carried = version != "" and re.search(
+                        r"(?<![0-9A-Za-z.])" + re.escape(version) + r"(?![0-9A-Za-z]|\.[0-9])", script) is not None
                     report.add(f"completion {label}: a script that carries its candidates carries the catalog version",
                                carried, "" if carried else f"version {catalog.get('version')!r} is not in the script")
 
@@ -966,6 +969,10 @@ def run_kit(program: Program) -> Report:
         _run_kit(program, report)
     except OSError as error:
         report.add("program can be run", False, str(error))
+    except Exception as error:  # noqa: BLE001 - an answer the kit did not foresee must not end as a traceback
+        report.add("the kit completes its run", False,
+                   f"{type(error).__name__}: {error}; the checks after this one were not run. An answer of the "
+                   "program the kit did not foresee, or a defect of the kit: report it with the program's catalog")
     for failure in getattr(program, "failures", []):
         report.add("invocation completes within the timeout with UTF-8 output", False, failure)
     return report
@@ -977,18 +984,38 @@ def _run_kit(program: Program, report: Report) -> Report:
     if catalog_run.returncode != 0 and not catalog_run.stdout:
         report.add("describe answers", False, f"exit {catalog_run.returncode}: {catalog_run.stderr[:200]!r}")
         return report
-    body = envelope(report, "describe envelope", catalog_run, expect_ok=True)
+    # the catalog is judged just below, descriptor by descriptor, so that one of them does not end the run
+    body = envelope(report, "describe envelope", catalog_run, expect_ok=True, judge_data=False)
     if body is None:
         return report
-    catalog = body["data"]
+    catalog = answered = body["data"]
     issues = validate(catalog, SCHEMAS["describe"])
     report.add("describe catalog matches schemas/describe.json", not issues, issues_text(issues))
+    listed = catalog.get("commands") if isinstance(catalog, dict) and isinstance(catalog.get("commands"), list) else []
+    every = [command["id"] for command in listed if isinstance(command, dict) and isinstance(command.get("id"), str)]
     if issues:
-        return report
+        # A descriptor that does not match the schema is left out and the run goes on with the others, when
+        # nothing else is wrong with the catalog: one stray member must not hide every other check.
+        wrong = {int(match.group(1)) for issue in issues
+                 for match in [re.match(r"commands\[(\d+)\]", issue.path)] if match}
+        beyond = [issue for issue in issues if not re.match(r"commands\[\d+\]", issue.path)]
+        kept = [command for index, command in enumerate(listed) if index not in wrong]
+        if beyond or not kept or validate({**catalog, "commands": kept}, SCHEMAS["describe"]):
+            report.skip("the checks that read the catalog",
+                        "the catalog does not match its schema beyond single descriptors: nothing more is run")
+            return report
+        for index in sorted(wrong):
+            name = listed[index].get("id", f"commands[{index}]") if isinstance(listed[index], dict) else f"commands[{index}]"
+            report.skip(f"{name}: the checks on this command", "its descriptor does not match the schema")
+        catalog = {**catalog, "commands": kept}
     commands = [command for command in catalog.get("commands", []) if isinstance(command, dict) and "id" in command]
     by_id = {command["id"]: command for command in commands}
-    report.patterns = {identifier: command["pattern"] for identifier, command in by_id.items()}
-    report.output_modes = {identifier: command["outputMode"] for identifier, command in by_id.items()}
+    # what an envelope must name is read from every listed descriptor, a left-out one included
+    named = [command for command in listed if isinstance(command, dict) and isinstance(command.get("id"), str)
+             and isinstance(command.get("pattern"), list) and all(isinstance(word, str) for word in command["pattern"])]
+    report.patterns = {command["id"]: command["pattern"] for command in named}
+    report.output_modes = {command["id"]: command["outputMode"] for command in named
+                           if isinstance(command.get("outputMode"), str)}
     report.verbatim = {identifier for identifier, command in by_id.items()
                        if command.get("external") or command.get("input", {}).get("passthrough")}
     for identifier, command in by_id.items():
@@ -1004,9 +1031,9 @@ def _run_kit(program: Program, report: Report) -> Report:
     report.add("describe kind is catalog", catalog.get("kind") == "catalog", f"kind {catalog.get('kind')!r}")
     report.add("command identifiers are unique", len(by_id) == len(commands))
     for identifier, pattern in BUILT_INS.items():
-        present = identifier in by_id
+        present = identifier in every
         report.add(f"built-in {identifier} is in the catalog", present)
-        if present:
+        if identifier in by_id:
             report.add(f"built-in {identifier} has pattern {' '.join(pattern)}", by_id[identifier].get("pattern") == pattern,
                        f"pattern {by_id[identifier].get('pattern')}")
     report.add("catalog lists the global options",
@@ -1097,7 +1124,7 @@ def _run_kit(program: Program, report: Report) -> Report:
         report.add("describe --summary matches schemas/describe.json", not issues, issues_text(issues))
         report.add("describe --summary kind is summary", data.get("kind") == "summary")
         report.add("describe --summary lists the same identifiers",
-                   [command.get("id") for command in data.get("commands", [])] == list(by_id))
+                   [command.get("id") for command in data.get("commands", [])] == every)
         report.add("describe --summary omits schemas and exit codes",
                    not any("outputSchema" in command or "exitCodes" in command for command in data.get("commands", [])))
         report.add("describe --summary omits examples",
@@ -1155,6 +1182,9 @@ def _run_kit(program: Program, report: Report) -> Report:
     candidate_body = envelope(report, "__complete envelope", candidates, expect_ok=True)
     version = program.run("version", "--format", "json")
     body = envelope(report, "version envelope", version, expect_ok=True)
+    if body is None:
+        report.skip("the checks of --verbose, --progress, --pager, --field and the text renderings of version",
+                    "they compare with the version envelope, which failed")
     if body is not None:
         issues = validate(body["data"], SCHEMAS["version"])
         report.add("version data matches schemas/version.json", not issues, issues_text(issues))
@@ -1222,7 +1252,7 @@ def _run_kit(program: Program, report: Report) -> Report:
                    and pager_never.stderr == "",
                    f"exit {pager_never.returncode}, stdout {pager_never.stdout[:60]!r}")
         check_pager_in_pipe(report, program)
-        check_field(report, program, catalog)
+        check_field(report, program, answered)  # what describe answers, a left-out descriptor included
         verbose_false = program.run("version", "--verbose=false", "--format", "text", "--non-interactive")
         report.add("--verbose=false is accepted and silent",
                    verbose_false.returncode == 0 and verbose_false.stdout == plain_text.stdout
@@ -1230,13 +1260,16 @@ def _run_kit(program: Program, report: Report) -> Report:
                    f"exit {verbose_false.returncode}, stderr {verbose_false.stderr[:80]!r}")
     help_run = program.run("help", "--format", "json")
     body = envelope(report, "help envelope", help_run, expect_ok=True)
+    if body is None:
+        report.skip("the checks of --help and of what a help names", "they compare with the help envelope, which failed")
     if body is not None:
         data = body["data"]
         report.add("help data has text and commands",
                    isinstance(data.get("text"), str) and bool(data.get("text")) and isinstance(data.get("commands"), list))
         # ---- `commands` names the commands the text shows (section 6) ----
         listed = data.get("commands") if isinstance(data.get("commands"), list) else []
-        strangers = [item for item in listed if item not in by_id or by_id[item].get("hidden") is True]
+        hidden = {command["id"] for command in named if command.get("hidden") is True}
+        strangers = [item for item in listed if item not in every or item in hidden]
         report.add("help lists identifiers of the catalog, none of them hidden", not strangers, f"listed {strangers[:6]}")
         about = program.run("help", "version", "--format", "json", "--non-interactive")
         about_body = envelope(report, "help version envelope", about, expect_ok=True)
@@ -1342,9 +1375,12 @@ def _run_kit(program: Program, report: Report) -> Report:
                        f"commands {str(helped_body['data'].get('commands'))[:120]}")
     for long, argument in GLOBAL_OPTIONS.items():
         words = [long, argument["choices"][0] if argument.get("choices") else "x"] if argument else [long]
+        tail = [] if long == "--json" else ["--json"]
+        if long == "--field":
+            # with --json the line is refused for --field itself: only a line that would render tells a repetition
+            words, tail = ["--field", "version"], ["--format", "jsonl"]
         check_failure(report, f"duplicate {long} fails with VALIDATION_FAILED",
-                      program.run("version", *words, *words, *([] if long == "--json" else ["--json"])),
-                      "VALIDATION_FAILED")
+                      program.run("version", *words, *words, *tail), "VALIDATION_FAILED")
     for long in ("--format", "--color", "--progress", "--pager"):
         check_failure(report, f"invalid {long} choice fails with VALIDATION_FAILED",
                       program.run("version", f"{long}=invalid-choice", "--json"), "VALIDATION_FAILED")
@@ -1454,7 +1490,11 @@ def main(argv: list[str]) -> int:
     summary = {"reportVersion": 1, "program": command, "contract": "agent-cli/v2", "passed": report.passed,
                "checks": report.checks, "counts": {"passed": passed, "failed": failed, "skipped": skipped},
                "scope": {"catalog": "all descriptors", "invocations": "built-ins and safe hidden-option probes",
-                         "notChecked": ["product business behavior and writes", "protocol streams and delegates",
+                         "skipped": [f"{check['name']}: {check['detail']}" for check in report.checks
+                                     if check["passed"] is None],
+                         "notChecked": ["product business behavior and writes",
+                                        "what a protocol stream or a delegate does with its stdio and its exit "
+                                        "status",
                                         "terminal rendering (tested separately by implementations)",
                                         "declarations the program never emits: a kit sees what a program chooses "
                                         "to show, so a framework checks its own output over every declaration "
@@ -1465,7 +1505,9 @@ def main(argv: list[str]) -> int:
                                         "program adds words of its own to its delegate's",
                                         "whether an installed completion script is stale after an upgrade",
                                         "the writes of `completion install --apply`: the kit runs the plan, and "
-                                        "`--apply` only with a `--field` the program must refuse before it writes",
+                                        "`--apply` only with an option the program must refuse before it writes, "
+                                        "after it has read in the plan that every path lies in the home it made; "
+                                        "a program that plans there and writes elsewhere is not caught",
                                         "a refusal to render after a write on any other command, and a format "
                                         "the environment selects",
                                         "whether a fingerprint covers the action and the state on a product's own "

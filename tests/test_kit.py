@@ -172,15 +172,24 @@ class CoverageTest(unittest.TestCase):
 
 class KitTest(unittest.TestCase):
     def test_conformant_fixture_passes(self) -> None:
-        completed = kit(sys.executable, str(FIXTURE))
-        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        """One run of the real kit, as a user launches it: the program named by a relative path, the text on
+        stdout and the report in a file. 2.7.0 lost every check after the completion scripts for
+        `conformance/run.py build/bin/program`, the form the README shows: the scripts are driven from another
+        directory."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            written = pathlib.Path(directory) / "report.json"
+            completed = subprocess.run([sys.executable, str(KIT), str(FIXTURE.relative_to(ROOT)), "--report", str(written)],
+                                       cwd=ROOT, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertEqual(completed.returncode, 0, completed.stdout[-600:] + completed.stderr)
+            body = json.loads(written.read_text(encoding="utf-8"))
         self.assertIn("conformance: ", completed.stdout)
         self.assertFalse([line for line in completed.stdout.splitlines() if line.startswith("FAIL ")])
-        report = kit(sys.executable, str(FIXTURE), "--json")
-        body = json.loads(report.stdout)
         self.assertTrue(body["passed"])
         self.assertGreater(body["counts"]["passed"], 40)
         self.assertEqual(body["counts"]["failed"], 0)
+        self.assertTrue(any("on a terminal writes nothing" in check["name"] and check["passed"] for check in body["checks"]))
+        self.assertEqual(len(body["scope"]["skipped"]), body["counts"]["skipped"])
 
     def test_broken_fixtures_fail(self) -> None:
         for defect, expected in (("exit-codes", "matches schemas/describe.json"),
@@ -262,15 +271,26 @@ class KitTest(unittest.TestCase):
             driven = [name for name in verdicts if name.startswith("completion bash") and "offers the words" in name]
             self.assertTrue(driven and all(verdicts[name] for name in driven), driven)
 
-    def test_a_program_named_by_a_relative_path_is_driven(self) -> None:
-        """2.7.0 lost every check after the completion scripts for `conformance/run.py build/bin/program`,
-        the form the README shows: the scripts are driven from another directory."""
-        completed = subprocess.run([sys.executable, str(KIT), str(FIXTURE.relative_to(ROOT)), "--json"], cwd=ROOT,
-                                   check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.assertEqual(completed.returncode, 0, completed.stdout[-600:] + completed.stderr)
-        body = json.loads(completed.stdout)
-        self.assertEqual(body["counts"]["failed"], 0)
-        self.assertTrue(any("on a terminal writes nothing" in check["name"] and check["passed"] for check in body["checks"]))
+    def test_one_wrong_descriptor_does_not_end_the_run(self) -> None:
+        """Until 2.14.0 a catalog with one stray member got a report of two lines. The descriptor is left out,
+        said so, and the other commands are checked."""
+        report = run_kit(FixtureProgram("extra-member"))
+        failed = [check["name"] for check in report.checks if check["passed"] is False]
+        skipped = [check["name"] for check in report.checks if check["passed"] is None]
+        self.assertIn("describe catalog matches schemas/describe.json", failed)
+        self.assertIn("version: the checks on this command", skipped)
+        self.assertGreater(sum(check["passed"] is True for check in report.checks), 300)
+        self.assertFalse([name for name in failed if "matches schemas/describe.json" not in name], failed)
+        # a catalog that is wrong beyond single descriptors still ends the run, and says so
+        report = run_kit(FixtureProgram("missing-output-schema"))
+        self.assertIn("the checks that read the catalog", [check["name"] for check in report.checks if check["passed"] is None])
+
+    def test_an_answer_the_kit_did_not_foresee_is_a_line_of_the_report(self) -> None:
+        import run as kit_module
+        from unittest.mock import patch
+        with patch.object(kit_module, "check_completion_install", side_effect=KeyError("pattern")):
+            report = run_kit(FixtureProgram())
+        self.assertIn("the kit completes its run", [check["name"] for check in report.checks if check["passed"] is False])
 
     def test_a_missing_shell_is_skipped_not_failed(self) -> None:
         import run as kit_module

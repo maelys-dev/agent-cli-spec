@@ -1,5 +1,51 @@
 # Changelog
 
+What can make a program that passed the tag before fail the kit of a tag, for
+whoever moves a pin. A tag that is not listed asks nothing of a program.
+
+| Tag | A program fails from this tag when |
+| --- | --- |
+| 2.14.0 | it prints nothing and exits 0 for `COMMAND --help --format jsonl`; it ignores `--version` after a command; it answers `help` of an unknown identifier with the general help; it runs an unavailable command, or refuses its rendering or its help instead of naming the cause |
+| 2.13.0 | it lists every command in `data.commands` for `help COMMAND_ID` |
+| 2.12.0 | it puts `examples` in `describe --summary`; under `--help` its envelope names the command asked about and not `help` |
+| 2.11.0 | it runs a command when `--help` follows its words; it declares an example its own catalog refuses |
+| 2.10.0 | it declares a delegate (`external: true`) with an effect other than `execute`, or with a `protocol` |
+| 2.9.0 | it declares `completion.install` and refuses a `--field` only after it has written; it declares `--expect` on a transaction without the reserved shape |
+| 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
+| 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
+
+## Unreleased
+
+Follow-up of an independent review: the kit's own weaknesses, and what the
+repository says of itself. No requirement changes.
+
+- **One wrong descriptor no longer ends the report.** A catalog with one
+  stray member got a report of two lines, and its author learned of the next
+  four hundred checks only after fixing it. The descriptor is left out, the
+  report says so, and the other commands are checked. A catalog that is
+  wrong beyond single descriptors still ends the run, and says so.
+- **An answer the kit did not foresee is a line of the report**, `the kit
+  completes its run`, not a traceback.
+- What depends on an envelope that failed is reported `SKIP` in so many
+  words; it used to vanish from the report. The report's `scope.skipped`
+  lists what this run skipped, next to `scope.notChecked`, which says what no
+  run checks.
+- **Two checks passed for the wrong reason.** `duplicate --field` ran with
+  `--json`, which refuses `--field` whatever is repeated: a program that
+  never detected a repetition passed. And a script that carries its
+  candidates "carries the catalog version" when the version was a substring
+  of anything, `1` of `10`. Both now test what their name says. **A program
+  that does not refuse a repeated `--field`, or whose static script does not
+  carry its version as a word, fails from this version.**
+- The README said the kit never passes `--apply`, false since 2.9.0; it says
+  when it does. Its example pinned `v2.0.0`. It presents
+  `tests/invocations.py`, and `examples/maelys-cli.contract.json` for what it
+  is, a catalog of the 2.2.1 era.
+- `RELEASING.md` writes down what a change of the contract consists of and
+  what is run before a tag, and `make siblings-check` runs the kit and the
+  generated lines on a built checkout of maelys-cli.
+- The tests launch the whole kit as a program once instead of three times.
+
 ## 2.14.0 — 2026-10-09
 
 What a line is refused for, and in what order, around `--help`, `--version`
