@@ -17,6 +17,8 @@
   sentence and is not checked.
 - Two defects of the fixture (`help-lists-all`, `help-lists-hidden`) prove the
   checks.
+- Adopts maelys-release v0.63.2: two pinned workflows, nothing asked of this
+  repository.
 
 ## 2.12.0 — 2026-10-08
 
