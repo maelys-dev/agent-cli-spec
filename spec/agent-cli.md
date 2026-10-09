@@ -17,6 +17,36 @@ the [conformance kit](../conformance/run.py) checks any of them from the
 outside, and the [schemas](../schemas/) are the machine-readable form of
 what follows.
 
+## Terms
+
+The words this document uses before the section that defines them.
+
+- **Catalog**: the description of every command of a program, which
+  `describe` returns (section 1). A **descriptor** is its entry for one
+  command (section 2).
+- **Identifier** and **pattern**: a command has a stable identifier
+  (`note.write`) and a pattern, the words that select it on a command line
+  (`note write`) (section 2).
+- **Line**: a command line, the words given to the program after its name.
+- **Trunk**: the options every program accepts on every command
+  (section 5), and the built-in commands every program has (section 6).
+- **Transaction**: a command that plans by default and writes only with
+  `--apply` (section 4).
+- **Delegate**: a command that hands what follows its pattern to another
+  executable, without reading it; its descriptor says `external: true`. A
+  **`passthrough`** command is one whose words after the pattern are not
+  read by the catalog's parser, which is the case of a delegate and of
+  nothing else (sections 2 and 9).
+- **Stream command**: a command whose effect is `stream`: its stdout is a
+  protocol's, or that of a child it starts, and never an envelope
+  (section 9).
+- **Rendering options**: the options that choose or shape what a command
+  writes on stdout: `--format`, `--json`, `--compact`, `--pretty`, `--pager`
+  and `--field` (sections 5 and 9).
+- **Envelope**: the one JSON document that carries a command's answer in
+  the `json` format, on stdout for a success and on stderr for a failure
+  (section 7).
+
 ## 1. Discovery
 
 A program MUST answer these invocations with a success envelope:
@@ -227,6 +257,8 @@ by hand.
 exist nowhere else: the `effect` of a command is `read`, `execute`, `stream`,
 or the object a transaction declares.
 
+### Transactions
+
 A transaction declares the two-phase effect and an `--apply` option. Without
 `--apply` it returns `data.mode: "plan"` and writes nothing; with `--apply` it
 re-validates its preconditions and returns `data.mode: "apply"`. A plan MUST
@@ -234,6 +266,8 @@ carry enough identity (revision, digest, paths) for the caller to review the
 exact later action. `--dry-run` and `--plan` MUST be refused with
 `VALIDATION_FAILED` and a hint naming `--apply`: one spelling of the intent
 across products is what the contract exists for.
+
+### Binding an application to its plan
 
 Re-validation says that the state still allows a transaction, not that the
 action is the one the caller reviewed: `--apply` plans again and applies that
@@ -243,12 +277,15 @@ FINGERPRINT` (a `digest` argument whose `algorithms` are `["sha256"]`,
 `requires` naming `--apply`) and lists `fingerprint` in the top-level
 `required` of its `outputSchema`, so that the catalog alone says whether a
 plan can be bound and `--field fingerprint` reads the value (section 5).
+
 `data.fingerprint` is a `sha256:HEX` string the program computes over the
 action the plan describes and over the state of the resources that action
 would touch: two runs that would perform the same writes on the same state
 carry the same fingerprint, and a run that would perform another write, or
 the same write on another state, carries another. How it is computed is the
-product's business; what equality means is this contract's. With `--apply
+product's business; what equality means is this contract's.
+
+With `--apply
 --expect FINGERPRINT` the program computes the fingerprint of the action it
 is about to perform and, when it differs, fails with `PRECONDITION_FAILED`
 before anything is written, the hint saying to plan again: the caller
@@ -265,6 +302,8 @@ for one, a new plan says where things stand: a fingerprint equal to the
 reviewed one says the action is still to be done, another that something
 changed and the plan is to be reviewed again. That is why the fingerprint
 covers the state and not the arguments alone.
+
+### What a terminal does not change
 
 An effect is declared, so it holds whatever the streams are. A terminal on
 stdout or stderr changes presentation (sections 5 and 7), never whether a
@@ -296,6 +335,34 @@ option with a value takes exactly the choices shown, whatever name the
 catalog gives its argument. `--flag=false` disables the flag, including
 `--non-interactive=false`; a false flag does not activate its implied behavior.
 
+### Where they apply
+
+`--format`, `--json`, `--compact`, `--pretty`, `--pager` and `--field` are
+the rendering options: they choose or shape what a command writes on stdout.
+A `protocol-stream` command refuses every rendering option when given, and a
+delegate receives every option verbatim with the rest of its arguments, as
+section 9 says. `--progress` and `--verbose` are not rendering options: a
+`protocol-stream` command accepts them and keeps its diagnostics on stderr
+as section 9 requires.
+
+### The format
+
+`--format jsonl` is accepted by a `json-records` command, and by any command
+together with `--field`. `--json` and `--format` set the same thing, as
+`--compact` and `--pretty` do: the last one written on the line wins
+(section 8).
+
+An implementation
+MAY honor an environment variable that selects the default format
+(`MAELYS_CLI_FORMAT` in the Maelys implementations), so that an agent obtains
+a JSON failure envelope from a stream command whose stdout it cannot touch.
+What the environment selects is known before the command runs: a refusal it
+causes, `--field` against a default of `json` for one, is a rendering
+constraint of section 8 and is reported then, never after the command has
+run.
+
+### Progress and details: `--progress`, `--verbose`
+
 Progress and details follow the example of git's progress and of `--color
 auto`. In text mode a program MAY show the progress of a long run on stderr:
 with `--progress auto`, the default, only when stderr is a terminal, so that
@@ -304,20 +371,23 @@ suppresses it. Progress is transient: the program finishes or erases it
 before it exits, and never writes it to stdout. `--verbose` adds the details
 of the run on stderr, what the program does, waits for and skips, one line
 each, default silent, whatever stderr is; a detail line SHOULD carry a
-distinct prefix (`PROGRAM: `, as git's `remote: `). Under `--format json` or
+distinct prefix (`PROGRAM: `, as git's `remote: `).
+
+Under `--format json` or
 `jsonl` both options are accepted and write nothing, so that an agent's
 envelope stays alone on its stream. A program that has nothing to show
 accepts both and produces nothing more, never an error. A progress or detail
 line is never an envelope and never starts with `PROGRAM: [`, the rendering
 of a failure; both are colored under the same rule as that rendering
-(`--color`, `NO_COLOR`, `TERM=dumb`). Neither is a rendering option: a
-`protocol-stream` command accepts them and keeps its diagnostics on stderr
-as section 9 requires, and a delegate receives them verbatim with the rest
-of its arguments. One spelling across products, as for `--apply`: a product
+(`--color`, `NO_COLOR`, `TERM=dumb`).
+
+One spelling across products, as for `--apply`: a product
 MUST NOT declare another option for the same intents; a finer diagnostic
 (`--debug`, a trace) is a product option with its own meaning. An agent
 checks that `globalOptions` lists them before passing them: a program pinned
 to an earlier tag of this contract does not have them.
+
+### The pager: `--pager`
 
 A pager follows git too. In text mode, with `--pager auto`, the default, a
 program MAY send its rendering through a pager when stdout is a terminal, so
@@ -325,21 +395,25 @@ that a human browses a long rendering as `git log` is browsed. A pager is
 never started when stdout is not a terminal, as git never does; `always`
 pages whenever stdout is a terminal, even where a product setting would
 disable it; `never` disables it. `--non-interactive` implies `--pager never`:
-a pager waits for a human, and the option promises none. The pager is the
+a pager waits for a human, and the option promises none.
+
+The pager is the
 executable and arguments named by `PAGER`, split using POSIX shell quoting
 and backslash rules, without shell expansion, pipelines or redirections.
 An empty or whitespace-only `PAGER` disables it; when it is unset the
 program runs `less` and sets `LESS=FRX` unless `LESS` is set, as git does, so
 that a short rendering passes through and colors survive. When the pager
 cannot be started, or its command cannot be parsed, the rendering goes to
-stdout unchanged. The pager receives
+stdout unchanged.
+
+The pager receives
 the rendering that would have gone to stdout, colored as `--color` decided
 on that stdout, not on the pager's pipe; it changes neither the exit code
 nor the failure rendering, which stays on stderr. Under `--format json` or
-`jsonl` the option is accepted and nothing is paged. `--pager` is a
-rendering option: a `protocol-stream` command refuses it when given, as
-section 9 says, and a delegate receives it verbatim. A program without a
+`jsonl` the option is accepted and nothing is paged. A program without a
 pager accepts the option and writes to stdout as before.
+
+### One member of the result: `--field`
 
 `--field NAME` renders one member of `data` instead of the whole result, so
 that a human reads a member without a query tool. `NAME` is a top-level
@@ -373,22 +447,10 @@ accepts is read in the invocation and in the catalog, never in the data.
 
 `--field` with `--format json` fails with `VALIDATION_FAILED`: `data` is
 governed by the descriptor's `outputSchema`, and a filtered envelope would no
-longer validate against it. `--field` is a rendering option: a
-`protocol-stream` command refuses it, a delegate receives it verbatim. It
+longer validate against it. It
 pages like any text rendering, changes no exit code, and leaves the failure
 rendering alone, a failure carrying no `data`. On a `json-records` command
 `--field records` is allowed and renders what the command already renders.
-
-`--format jsonl` is accepted by a `json-records` command, and by any command
-together with `--field`. A
-`protocol-stream` command refuses every rendering option. An implementation
-MAY honor an environment variable that selects the default format
-(`MAELYS_CLI_FORMAT` in the Maelys implementations), so that an agent obtains
-a JSON failure envelope from a stream command whose stdout it cannot touch.
-What the environment selects is known before the command runs: a refusal it
-causes, `--field` against a default of `json` for one, is a rendering
-constraint of section 8 and is reported then, never after the command has
-run.
 
 ## 6. Built-in commands
 
@@ -401,6 +463,8 @@ run.
 | `complete.candidates` | `__complete -- WORDS...`, hidden, `json-records` | `{"count": N, "records": [{"word": ...}]}` |
 | `completion.install` | `completion install SHELL [--apply]`, reserved: offered or not | `mode`, `shell`, `files`, `catalog`, `activate` |
 
+### `help` and `version`
+
 `--help` and `--version` are `help` and `version` spelled as options: as the
 first word of the line each selects its command. `help` of an identifier the
 catalog does not have fails with `INVALID_COMMAND`, as `describe` does.
@@ -411,6 +475,7 @@ such line, so that a program asked its version never runs something else.
 `--help` after the words of a command gives the help of that command, as
 `help COMMAND_ID` does, and the command does not run, whatever else the line
 carries, `--apply` included: asking how a command is used never performs it.
+
 It works on an incomplete line, which is when help is asked: what the line
 as a whole lacks, a required option, an operand, an option another one
 requires, is not held against it. What one option says alone still is: an
@@ -419,6 +484,7 @@ kind fails first and names the command (section 8). From there on the line
 is rendered as `help` is: `--format jsonl` without `--field` is refused as it
 is for `help`, the help not being records, and `--field commands` renders the
 identifier.
+
 The envelope then names `help`, the command whose data it carries: that
 `data` is the help's and would not validate against the `outputSchema` of the
 command asked about. A line that fails instead, on an option the command does
@@ -434,6 +500,8 @@ COMMAND_ID` and for `--help` after a command. An agent goes from a help to
 general help never lists a hidden command; asked by its identifier, a hidden
 command is the one `commands` names, as `describe COMMAND_ID` answers for it:
 answering who names it is not offering it.
+
+### Completion
 
 `completion SHELL` prints the script and writes nothing; in text mode the
 script alone, so that a shell loads it straight from the command (`source
@@ -452,7 +520,9 @@ they come from. It is current while that catalog is unchanged, and whoever
 installs it regenerates it when the program changes; how staleness is
 detected is the implementation's business, not this contract's. After the
 pattern of a delegate, whose words the catalog does not hold (section 9),
-such a script calls `__complete`. Candidates come from the catalog: command
+such a script calls `__complete`.
+
+Candidates come from the catalog: command
 words, that is the first word of each command and, after the first words of
 a command of several, its next word (`write` after `note`); options not yet
 given with hidden options excluded; choices; command identifiers after
@@ -461,6 +531,8 @@ is never offered, as a word or as an identifier: `describe` still answers
 for it, completion does not propose it. Whether options are offered before a
 `-` is typed is the implementation's choice, and a script follows its own
 `__complete` either way.
+
+### Installing the completion
 
 `completion.install` is reserved. A program MAY offer the installation of
 its completion; one that does declares exactly this, for the reason `--apply`
@@ -472,7 +544,9 @@ has one spelling: pattern `completion install SHELL`, the transaction effect
 it keeps one) and `activate`, the exact command that loads the completion in
 the current session. An installation that binds its plan (section 4) adds
 `--expect` and `fingerprint`, which say what would be written over what is
-there, where `catalog` says which catalog the script was generated from. The plan names every path and writes nothing, as
+there, where `catalog` says which catalog the script was generated from.
+
+The plan names every path and writes nothing, as
 section 4 requires; `--apply` writes the script, adds or replaces one
 identified block in the shell's startup file where the shell needs one, and
 leaves the rest of that file as it was. A program that declares nothing of
@@ -550,6 +624,8 @@ in `data`). A negative authorization decision is a successful read, never
 exit 1. A stream command or a delegate propagates the exit status of the
 underlying process, `128 + signal` on signal termination.
 
+### The order of the refusals
+
 Errors are reported in this causal order:
 
 1. command resolution (`INVALID_COMMAND`);
@@ -594,6 +670,8 @@ on the line wins. `--json` and `--format` set the format, `--compact` and
 and its own user adds another at the end of the line. The same option
 written twice is still a duplication of step 2: `--json --json`, `--format
 json --format text`.
+
+### Error codes
 
 | Code | Boundary |
 | --- | --- |
