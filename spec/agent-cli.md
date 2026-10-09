@@ -540,15 +540,18 @@ Errors are reported in this causal order:
    not run, with `UNSUPPORTED` when the function is absent from this build
    or version, or with the listed code that names the cause better
    (`NOT_FOUND` for a helper that is not installed), the message carrying
-   the reason. `describe` and `help` still answer for it;
+   the reason. Its line is read first, so a line that is wrong is told so;
+   its rendering is never reached, so `--format jsonl` on it names the cause
+   and not the format. `describe` answers for it, and so does its help,
+   step 3 coming before this one;
 6. rendering constraints;
 7. inside the command: file type and permissions, syntax, schema, policy,
    state and concurrency preconditions.
 
 A failure of steps 1 to 5 names the command the line resolved, or `unknown`.
-An implementation MAY report availability earlier than step 5, an
-unavailable command having nothing to say about its line; it MUST NOT run
-the command.
+A word after `--` is an operand whatever its spelling: `--help` and
+`--version` there ask nothing. A flag set to false is a flag not given:
+`--help=false` asks no help.
 
 | Code | Boundary |
 | --- | --- |
