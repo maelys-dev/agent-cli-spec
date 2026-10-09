@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.14.0 — 2026-10-09
 
 What a line is refused for, and in what order, around `--help`, `--version`
 and a command the build cannot run. Found by an independent review and by
