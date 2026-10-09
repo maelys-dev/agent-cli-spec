@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.13.0 — 2026-10-09
 
 - **In the data of `help`, `commands` names the commands the text shows**
   (section 6): every command it lists for `help`, the one asked for `help
