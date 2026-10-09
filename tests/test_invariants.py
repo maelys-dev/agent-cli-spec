@@ -29,7 +29,9 @@ def survey(program, count: int, defaults=("text",)) -> dict[str, list[str]]:
         for default in defaults:
             rng = random.Random(2130)
             for command in catalog["commands"]:
-                for words in invocations.lines(command, rng, count):
+                built = invocations.lines(command, rng, count)
+                # a delegate starts a child for each line, and the catalog says nothing of what follows its pattern
+                for words in built[:8] if command.get("external") else built:
                     if invocations.open_reading(words, default):
                         continue
                     shutil.rmtree(home, ignore_errors=True)
@@ -70,6 +72,23 @@ class GeneratedInvocationsTest(unittest.TestCase):
                                  ("unavailable-after-rendering", "unavailable-order")):
             with self.subTest(defect=defect):
                 self.assertIn(expected, set(survey(FixtureProgram(defect), count=1)) - clean)
+
+    def test_the_fixture_hands_a_delegate_its_line_and_keeps_a_stream_its_stdout(self):
+        """Section 9. Until 2.14.0 the fixture's delegate parsed its line and answered with an envelope, and its
+        stream command accepted every rendering option."""
+        program = FixtureProgram()
+        for words in (["--json", "--format", "bogus"], ["--help"], ["--version", "--no-such-option"], ["--", "ls", "-la"]):
+            handed = program.run("tool", *words)
+            self.assertEqual((handed.returncode, handed.stdout, handed.stderr), (0, " ".join(["child:", *words]) + "\n", ""))
+        self.assertEqual(program.run("tool", "--fail").returncode, 7)
+        self.assertEqual((program.run("serve").returncode, program.run("serve").stdout), (0, ""))
+        for words in (["--format", "json"], ["--json"], ["--compact"], ["--pretty"], ["--pager", "never"], ["--field", "x"]):
+            refused = program.run("serve", *words)
+            self.assertEqual((refused.returncode, refused.stdout), (1, ""), words)
+            self.assertIn("VALIDATION_FAILED", refused.stderr)
+        for words in (["--verbose"], ["--progress", "never"], ["--color", "never"], ["--non-interactive"]):
+            self.assertEqual(program.run("serve", *words).returncode, 0, words)
+        self.assertIn("serve", program.run("serve", "--help").stdout)
 
     def test_a_line_is_judged_as_the_catalog_says(self):
         """The generator and the judge on one small command: what is built is valid, and each fault is seen."""
