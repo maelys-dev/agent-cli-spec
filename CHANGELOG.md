@@ -31,24 +31,34 @@ implementations before it was written.
 - **Invoking a command whose `available` is `false` fails and does not run**
   (sections 2 and 8): with `UNSUPPORTED` when the function is absent from the
   build, or with the listed code that names the cause better, the message
-  carrying the reason. `describe` and `help` still answer for it. The text
-  declared the member and the code and never joined them; the fixture ran
-  the command. **A program that runs an unavailable command fails from this
-  version.**
+  carrying the reason. It is the fifth step of the order: the line is read
+  first, so a wrong line is told so; the rendering is never reached, so
+  `--format jsonl` names the cause and not the format; and its help is given,
+  as `describe` answers for it. The text declared the member and the code and
+  never joined them; the fixture ran the command. **A program that runs an
+  unavailable command, or refuses its rendering or its help instead of
+  naming the cause, fails from this version.**
+- A word after `--` is an operand whatever its spelling, so `--help` and
+  `--version` there ask nothing, and a flag set to false is a flag not given,
+  so `--help=false` asks no help (section 8). Both were already what the two
+  maelys-cli implementations and the fixture did.
 - The kit checks each of these on lines that are safe to run: `version` with
   an operand, `help --version`, `help` of an unknown identifier, an unknown
   option before `--help`, `completion --help` without its operand, `version
-  --help --format jsonl` with and without `--field`, an unavailable command
-  that reads and needs no operand, and `completion install SHELL --apply
-  --version` in a home the kit made. Its report says what of the order it
-  does not check.
+  --help --format jsonl` with and without `--field`, `describe --prefix
+  version --help` where `--prefix` requires `--summary`, an unavailable
+  command that reads and needs no operand (invoked, with `--format jsonl`,
+  and with `--help`), and `completion install SHELL --apply --version` in a
+  home the kit made. Its report says what of the order it does not check.
 - **The fixture has a parser for the number of operands**, which section 8
   always listed among the refusals and the fixture never checked (`version
   extra`, `note write` without its file), and judges a `digest` value where
-  every option value is judged. Seven defects prove the new checks
-  (`version-ignored`, `arity-unchecked`, `help-checks-arity`,
-  `help-jsonl-silent`, `unavailable-runs`, `help-unknown-general`, and the
-  digest through the generated lines).
+  every option value is judged. It follows the seven steps to the letter,
+  gives the help of `help` itself, and takes a default format from
+  `CONFORMANT_FORMAT`, as section 5 allows an implementation to. Seven
+  defects prove the new checks (`version-ignored`, `arity-unchecked`,
+  `help-checks-arity`, `help-jsonl-silent`, `unavailable-runs`,
+  `unavailable-after-rendering`, `help-unknown-general`).
 
 - **The reference program is held to generated command lines.** Two contract
   violations were found in the fixture by accident (2.9.0: it wrote before it
@@ -64,9 +74,16 @@ implementations before it was written.
 - It found the two gaps of the fixture closed above, the number of operands
   and `--version` after a command, and then a third, an option value of kind
   `digest` that the fixture judged too late. It holds the order of the
-  refusals too. `python3 tests/invocations.py PROGRAM` points it at another
-  program, by whoever owns that program: delegates, `passthrough` and stream
-  commands are never run, and lines carrying `--apply` only on request.
+  refusals too: an unavailable command against every rendering option and
+  `--help`, words after `--`, flags set to false, both spellings of a value,
+  lines that name no command, and every line again with the default format
+  the environment selects. `python3 tests/invocations.py PROGRAM` points it at
+  another program, by whoever owns that program: delegates, `passthrough` and
+  stream commands are never run, and lines carrying `--apply` only on
+  request. Two of its first invariants were this repository's own habits and
+  not the contract's, as maelys-cli's programs showed: that nothing the
+  catalog accepts is refused, and that a success prints in text mode. Both
+  now hold of the reference program only.
 - **The kit read `--flag=false` as the flag given.** Found by the same lines:
   an example carrying `--strict=false` was held to what `--strict` requires,
   conflicts with or is grouped with. Section 2 says `--flag=false` is

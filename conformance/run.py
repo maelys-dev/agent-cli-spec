@@ -1288,6 +1288,13 @@ def _run_kit(program: Program, report: Report) -> Report:
         report.add("--help gives the help of a command whose line lacks a required operand",
                    incomplete_body["data"].get("commands") == ["completion"],
                    f"commands {str(incomplete_body['data'].get('commands'))[:120]}")
+    if "--summary" in prefix_option.get("requires", []):
+        lacking = program.run("describe", "--prefix", "version", "--help", "--format", "json", "--non-interactive")
+        lacking_body = envelope(report, "describe --prefix version --help envelope", lacking, expect_ok=True)
+        if lacking_body is not None:
+            report.add("--help gives the help of a command whose line lacks an option another one requires",
+                       lacking_body["data"].get("commands") == ["describe"],
+                       f"commands {str(lacking_body['data'].get('commands'))[:120]}")
     check_failure(report, "under --help, jsonl without --field is refused as it is for help",
                   program.run("version", "--help", "--format", "jsonl"), "VALIDATION_FAILED", command="help")
     member = program.run("version", "--help", "--format", "jsonl", "--field", "commands")
@@ -1313,6 +1320,26 @@ def _run_kit(program: Program, report: Report) -> Report:
             code = refused_body["error"]["code"]
             report.add(name, code not in ("VALIDATION_FAILED", "INVALID_COMMAND", "UNEXPECTED"),
                        f"code {code}: the line is valid and the command exists, the build cannot run it")
+        # step 5 comes before step 6: the rendering of a command that cannot run is never reached
+        if command["outputMode"] != "json-records":
+            rendered = program.run(*command["pattern"], "--format", "jsonl", "--non-interactive")
+            if rendered.returncode != 1:
+                report.add(f"{identifier}: an unavailable command names its cause, not its rendering", False,
+                           f"exit {rendered.returncode}, expected 1")
+            else:
+                rendered_body = envelope(report, f"{identifier}: an unavailable command names its cause, not its rendering",
+                                         rendered, expect_ok=False)
+                if rendered_body is not None:
+                    code = rendered_body["error"]["code"]
+                    report.add(f"{identifier}: an unavailable command names its cause, not its rendering",
+                               code != "VALIDATION_FAILED", f"code {code} for --format jsonl")
+        # step 3 comes before step 5: the help of a command that cannot run is given
+        helped = program.run(*command["pattern"], "--help", "--format", "json", "--non-interactive")
+        helped_body = envelope(report, f"{identifier}: the help of an unavailable command envelope", helped, expect_ok=True)
+        if helped_body is not None:
+            report.add(f"{identifier}: the help of an unavailable command is given",
+                       helped_body["data"].get("commands") == [identifier],
+                       f"commands {str(helped_body['data'].get('commands'))[:120]}")
     for long, argument in GLOBAL_OPTIONS.items():
         words = [long, argument["choices"][0] if argument.get("choices") else "x"] if argument else [long]
         check_failure(report, f"duplicate {long} fails with VALIDATION_FAILED",

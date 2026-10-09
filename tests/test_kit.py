@@ -197,6 +197,7 @@ class KitTest(unittest.TestCase):
                                  ("help-checks-arity", "completion --help envelope"),
                                  ("help-jsonl-silent", "jsonl without --field is refused as it is for help"),
                                  ("unavailable-runs", "an unavailable command fails and does not run"),
+                                 ("unavailable-after-rendering", "names its cause, not its rendering"),
                                  ("help-unknown-general", "help of an unknown identifier fails"),
                                  ("summary-examples", "describe --summary envelope data matches schemas/describe.json"),
                                  ("help-runs", "--apply --help writes nothing"),

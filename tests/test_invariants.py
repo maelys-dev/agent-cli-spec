@@ -16,24 +16,31 @@ import invocations
 KNOWN_GAPS: dict[str, str] = {}
 
 
-def survey(program, count: int) -> dict[str, list[str]]:
-    """Every generated line run in a home of its own; the lines found at fault, by what they break."""
+def survey(program, count: int, defaults=("text",)) -> dict[str, list[str]]:
+    """Every generated line run in a home of its own; the lines found at fault, by what they break. `defaults`
+    are the formats the environment selects in turn, CONFORMANT_FORMAT being the fixture's variable for it."""
     catalog = json.loads(program.run("describe", "--json").stdout)["data"]
-    rng = random.Random(2130)
     found: dict[str, list[str]] = collections.defaultdict(list)
+    for words in invocations.unknown_lines():
+        for violation in invocations.unknown_violations(words, program.run(*words)):
+            found[violation.split(": ", 1)[0]].append(" ".join(words))
     with tempfile.TemporaryDirectory(prefix="agent cli lines ") as directory:
         home = pathlib.Path(directory) / "home"
-        for command in catalog["commands"]:
-            for words in invocations.lines(command, rng, count):
-                shutil.rmtree(home, ignore_errors=True)
-                home.mkdir()
-                env = {"HOME": str(home), "XDG_DATA_HOME": "", "XDG_CONFIG_HOME": "", "ZDOTDIR": ""}
-                completed = program.run(*words, env=env)
-                written = sorted(str(path.relative_to(home)) for path in home.rglob("*") if path.is_file())
-                for violation in invocations.violations(command, catalog["globalOptions"], words, completed, written,
-                                                        reference=True):
-                    name, detail = violation.split(": ", 1)
-                    found[f"accepts {detail}" if name == "accepts" else name].append(" ".join(words))
+        for default in defaults:
+            rng = random.Random(2130)
+            for command in catalog["commands"]:
+                for words in invocations.lines(command, rng, count):
+                    shutil.rmtree(home, ignore_errors=True)
+                    home.mkdir()
+                    env = {"HOME": str(home), "XDG_DATA_HOME": "", "XDG_CONFIG_HOME": "", "ZDOTDIR": "",
+                           "CONFORMANT_FORMAT": default}
+                    completed = program.run(*words, env=env)
+                    written = sorted(str(path.relative_to(home)) for path in home.rglob("*") if path.is_file())
+                    for violation in invocations.violations(command, catalog["globalOptions"], words, completed, written,
+                                                            reference=True, default=default):
+                        name, detail = violation.split(": ", 1)
+                        found[f"accepts {detail}" if name == "accepts" else name].append(
+                            " ".join(words) + ("" if default == "text" else f"  [default {default}]"))
     return found
 
 
@@ -41,7 +48,7 @@ class GeneratedInvocationsTest(unittest.TestCase):
     def test_the_fixture_does_what_the_contract_says_of_every_generated_line(self):
         """Some nine hundred lines built from the fixture's own catalog. Two defects of the fixture were found by
         accident before this existed: it wrote before it refused --field, and it ran a command under --help."""
-        found = survey(FixtureProgram(), count=40)
+        found = survey(FixtureProgram(), count=40, defaults=("text", "json"))
         unexpected = {name: lines[:3] for name, lines in found.items() if name not in KNOWN_GAPS}
         self.assertEqual(unexpected, {})
         self.assertEqual([name for name in KNOWN_GAPS if name not in found], [], "a known gap is closed: remove it")
@@ -57,7 +64,8 @@ class GeneratedInvocationsTest(unittest.TestCase):
                                  ("arity-unchecked", "accepts a wrong number of operands"),
                                  ("version-ignored", "accepts --version after a command"),
                                  ("help-checks-arity", "help-refused"), ("help-jsonl-silent", "help-jsonl"),
-                                 ("unavailable-runs", "unavailable-runs")):
+                                 ("unavailable-runs", "unavailable-runs"),
+                                 ("unavailable-after-rendering", "unavailable-order")):
             with self.subTest(defect=defect):
                 self.assertIn(expected, set(survey(FixtureProgram(defect), count=1)) - clean)
 

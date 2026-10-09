@@ -503,6 +503,8 @@ def field_text(value):
 
 def main(argv):
     fmt, compact, words, options, passthrough = "text", False, [], {}, None
+    if os.environ.get("CONFORMANT_FORMAT") in ("json", "text"):
+        fmt = os.environ["CONFORMANT_FORMAT"]  # section 5: an implementation may let the environment pick the default
     declarations = {item["long"]: item for item in GLOBAL_OPTIONS}
     declarations.update({item["long"]: item for command in CATALOG for item in command["input"]["options"]})
     declarations["--version"] = option("--version", "Version.")
@@ -526,13 +528,17 @@ def main(argv):
         else:
             words.append(word)
         index += 1
+    if options.get("--format") == "text":
+        fmt = "text"
     if options.get("--json") in (True, "true") or options.get("--format") == "json":
         fmt = "json"
     if options.get("--format") == "jsonl":
         fmt = "jsonl"
     compact = options.get("--compact") in (True, "true") or options.get("--pretty") == "false"
     if options.get("--help") in (True, "true") and not words:
+        # Section 6: --help is `help` spelled as an option; with no command on the line it selects help and is spent.
         words = ["help"]
+        del options["--help"]
     if options.get("--version") is True and (argv[:1] == ["--version"] or BREAK == "version-ignored" and not words):
         # Section 6: --version is `version` spelled as an option, as the first word of the line and nowhere else.
         words = ["version"] + words
@@ -584,16 +590,33 @@ def main(argv):
         return fail(selected["id"], "VALIDATION_FAILED", arity(selected, operands), fmt, compact)
     # Section 8: what one option says alone is judged first and names the command; then --help gives the help
     # of the command, and what the line as a whole lacks is no longer asked. The envelope names help.
-    helped = options.get("--help") is True and selected["id"] != "help" and not selected["input"]["passthrough"] \
-        and BREAK != "help-runs"
+    helped = options.get("--help") is True and not selected["input"]["passthrough"] and BREAK != "help-runs"
     named = selected["id"]
     if helped:
         named = selected["id"] if BREAK == "help-names-command" else "help"
         operands, selected = [selected["id"]], by_id["help"]
         if BREAK == "help-jsonl-silent" and fmt == "jsonl" and "--field" not in options:
             return 0
+    # step 4: what the line says as a whole
     if arity(selected, operands):
         return fail(selected["id"], "VALIDATION_FAILED", arity(selected, operands), fmt, compact)
+    if selected["id"] == "describe" and "--prefix" in options:
+        prefix = options["--prefix"]
+        if not options.get("--summary"):
+            return fail("describe", "VALIDATION_FAILED", "--prefix requires --summary.", fmt, compact)
+        if operands:
+            return fail("describe", "VALIDATION_FAILED", "--prefix conflicts with COMMAND_ID.", fmt, compact)
+        if not isinstance(prefix, str) or not prefix:
+            return fail("describe", "VALIDATION_FAILED", "--prefix requires PREFIX.", fmt, compact)
+        if re.fullmatch(r"[a-z]([a-z0-9.-]*[a-z0-9-])?", prefix) is None:
+            return fail("describe", "VALIDATION_FAILED", "--prefix is not a valid command prefix.", fmt, compact)
+    if selected["id"] == "completion.install" and "--expect" in options and not options.get("--apply"):
+        return fail(selected["id"], "VALIDATION_FAILED", "--expect requires --apply.", fmt, compact)
+    # step 5: this build cannot run the command, so it does not, whatever its rendering would have been refused for
+    if not selected["available"] and BREAK not in ("unavailable-runs", "unavailable-after-rendering"):
+        return fail(selected["id"], "UNSUPPORTED", f"'{selected['id']}' is not available: {selected['unavailableReason']}.",
+                    fmt, compact)
+    # step 6: rendering constraints
     if "--field" in options and fmt == "json":
         return fail(selected["id"], "VALIDATION_FAILED", "--field is not available with --format json.", fmt, compact)
     if "--field" in options and selected["effect"] != "read" and BREAK != "field-after-write":
@@ -605,22 +628,10 @@ def main(argv):
             return fail(selected["id"], "VALIDATION_FAILED",
                         f"--field accepts a member '{selected['id']}' always returns: {', '.join(accepted) or 'none'}.",
                         fmt, compact)
-    if selected["id"] == "describe" and "--prefix" in options:
-        prefix = options["--prefix"]
-        if not options.get("--summary"):
-            return fail("describe", "VALIDATION_FAILED", "--prefix requires --summary.", fmt, compact)
-        if operands:
-            return fail("describe", "VALIDATION_FAILED", "--prefix conflicts with COMMAND_ID.", fmt, compact)
-        if not isinstance(prefix, str) or not prefix:
-            return fail("describe", "VALIDATION_FAILED", "--prefix requires PREFIX.", fmt, compact)
-        if re.fullmatch(r"[a-z]([a-z0-9.-]*[a-z0-9-])?", prefix) is None:
-            return fail("describe", "VALIDATION_FAILED", "--prefix is not a valid command prefix.", fmt, compact)
     if fmt == "jsonl" and selected["outputMode"] != "json-records" and "--field" not in options:
         return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
-    if not selected["available"] and BREAK != "unavailable-runs":
-        # Section 2: this build cannot run the command, so it does not; describe and help still answer for it.
-        return fail(selected["id"], "UNSUPPORTED", f"'{selected['id']}' is not available: {selected['unavailableReason']}.",
-                    fmt, compact)
+    if not selected["available"] and BREAK == "unavailable-after-rendering":
+        return fail(selected["id"], "UNSUPPORTED", f"'{selected['id']}' is not available.", fmt, compact)
     identifier = selected["id"]
     verbose = options.get("--verbose", False)
     progress = options.get("--progress", "auto")
