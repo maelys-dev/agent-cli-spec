@@ -56,8 +56,8 @@ descriptor of the catalog and of the command form carries `outputSchema` and
 members.
 
 `describe --summary --prefix PREFIX` is the token-efficient discovery form
-for a command namespace. `PREFIX` has the command-identifier grammar of
-section 2 without a trailing dot, that is `^[a-z]([a-z0-9.-]*[a-z0-9-])?$`.
+for a command namespace. `PREFIX` matches `^[a-z]([a-z0-9.-]*[a-z0-9-])?$`,
+which every command identifier of section 2 does, and no trailing dot.
 It selects the command whose identifier equals `PREFIX`, if
 one exists, and every command whose identifier starts with `PREFIX.`; it does
 not perform an arbitrary string-prefix match. The response has `kind:
@@ -81,11 +81,11 @@ an invocation from `input`, never from help text.
 
 | Member | Value |
 | --- | --- |
-| `id` | stable identifier, `[a-z][a-z0-9.-]*`, unique in the catalog |
+| `id` | stable identifier, unique in the catalog: segments of lower-case letters, digits and hyphens separated by single dots, the first starting with a letter, `^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)*$`. `unknown` is reserved: it is what an envelope names when no command was resolved |
 | `pattern` | the words that select the command, in order |
 | `usage` | the human synopsis; MUST equal `input.synopsis` |
 | `purpose` | one sentence |
-| `effect` | one effect of section 4, or `{"plan": "preview", "apply": "apply"}` / `{"plan": "preview", "apply": "commit"}` for a transaction |
+| `effect` | `read`, `execute` or `stream` (section 4), or `{"plan": "preview", "apply": "apply"}` / `{"plan": "preview", "apply": "commit"}` for a transaction |
 | `outputMode` | `json-envelope`, `json-records` or `protocol-stream` |
 | `protocol` | the named protocol owning stdio (`git-smart`, `mcp-json-rpc`), when a `protocol-stream` command declares one; a command that merely relays a child's stdio declares none |
 | `external` | `true` when the catalog does not own what follows the pattern: those words are handed verbatim to another executable (section 9). Such a command, a delegate, declares the effect `execute` and no `protocol` |
@@ -108,7 +108,9 @@ kinds of section 3 and whatever that kind needs: `choices`, `minimum`,
 `maximum`, `algorithms`, `digits`, `pattern`. An operand describes its value
 exactly as an option's `argument` does, so a kind that needs a member needs
 it in both places. At most one operand is variadic, and it is the last one. `passthrough: true` means every argument
-after the pattern reaches the command verbatim, including `--help`.
+after the pattern reaches the command verbatim, including `--help`. It goes
+with `external: true` and with nothing else: a command that reads its own
+line, whatever it then starts, declares `false`.
 
 ### Options
 
@@ -177,12 +179,26 @@ command form carry it, the summary does not (section 1).
 
 ## 3. Value kinds
 
-`boolean`, `string`, `integer`, `unsigned`, `size` (K/M/G/T suffix),
-`duration` (unit required: ms, s, m, h, d), `path` (non-empty),
-`absolute-path`, `choice` (with `choices`), `hex`, `digest`
-(`ALGORITHM:HEX`, `algorithms` declared), `sha256`. Ranges and choices are
-declared in the catalog and enforced by the parser before the command runs.
-An option value that starts with `--` is still a value.
+| Kind | A value is |
+| --- | --- |
+| `string` | any text; `pattern` narrows it |
+| `path` | any non-empty text; `pattern` narrows it |
+| `absolute-path` | a path that starts at the root |
+| `choice` | one of `choices`, letter for letter |
+| `boolean` | `true` or `false` |
+| `integer` | an optional `-`, then digits, in decimal: no `+`, no exponent, no other base. Leading zeros mean nothing. Within a signed 64-bit integer, then within `minimum` and `maximum` |
+| `unsigned` | digits; at most 2^64 - 1, then within `minimum` and `maximum` |
+| `size` | digits, then at most one suffix among `K`, `M`, `G`, `T`, in upper case, the powers of 1024; the product fits an unsigned 64-bit integer, then `minimum` and `maximum` bound it |
+| `duration` | digits, then one unit among `ms`, `s`, `m`, `h`, `d`, in lower case; nothing composed, `90m` and not `1h30m`; the total in milliseconds fits an unsigned 64-bit integer |
+| `hex` | lower-case hexadecimal digits, as many as `digits` says: an integer, or the list of the widths accepted |
+| `sha256` | 64 lower-case hexadecimal digits |
+| `digest` | `ALGORITHM:HEX`: an algorithm among `algorithms`, in lower case, then lower-case hexadecimal digits of that algorithm's width, `sha1` 40, `sha256` 64, `sha384` 96, `sha512` 128. It needs no `digits` |
+
+A digit is one of `0` to `9` and no other character a Unicode table calls a
+digit. A flag written `--flag=VALUE` takes `true` or `false`; what else an
+implementation reads there is its own. Ranges and choices are declared in the
+catalog and enforced by the parser before the command runs. An option value
+that starts with `--` is still a value.
 
 `pattern`, on a `string` or `path` value, is the regular expression the value
 MUST match; the implementation enforces it by the means of its choice, a
@@ -206,6 +222,10 @@ by hand.
 | `commit` | Records a reviewed version-control commit. | Yes |
 | `execute` | Deliberately runs a non-transactional action. | Per action |
 | `stream` | Reserves stdio for a declared protocol, or for a child whose stdio the command relays. | Per protocol or child |
+
+`preview`, `apply` and `commit` are the two halves of a transaction and
+exist nowhere else: the `effect` of a command is `read`, `execute`, `stream`,
+or the object a transaction declares.
 
 A transaction declares the two-phase effect and an `--apply` option. Without
 `--apply` it returns `data.mode: "plan"` and writes nothing; with `--apply` it
@@ -259,9 +279,9 @@ Every program accepts, on every command:
 | Option | Meaning |
 | --- | --- |
 | `--format text\|json\|jsonl` | text for humans, json for one envelope, jsonl for records (default `text`) |
-| `--json` | exact alias of `--format json` |
+| `--json` | sets the format to `json`, the setting `--format` sets |
 | `--compact` | JSON on a single line |
-| `--pretty` | `--pretty=false` selects compact JSON |
+| `--pretty` | JSON indented, the setting `--compact` sets the other way; `--pretty=false` selects compact JSON |
 | `--non-interactive` | never prompt; fail with `VALIDATION_FAILED` instead of asking |
 | `--color auto\|always\|never` | ANSI colors on terminals (default `auto`) |
 | `--progress auto\|always\|never` | progress of a long run on stderr, in text mode, when stderr is a terminal (default `auto`) |
@@ -555,6 +575,21 @@ Errors are reported in this causal order:
 A failure of steps 1 to 5 names the command the line resolved, or `unknown`.
 A word after `--` is an operand whatever its spelling: `--help` and
 `--version` there ask nothing. `--help=false` asks no help.
+
+There is no short option. Before `--`, a word that starts with `-` and does
+not stop there is neither an option nor an operand: the line fails at step
+2 with `VALIDATION_FAILED`, in the name of the command it resolved, and with
+`INVALID_COMMAND` when it resolved none, step 1 coming first. `-` alone is
+an operand. A negative number meant as an operand is written after `--`: a
+refusal is corrected by the caller, a file named `-f` is not, and a caller
+who writes `-v` by habit learns that options are spelled `--name`.
+
+Two options that set the same thing do not conflict: the last one written
+on the line wins. `--json` and `--format` set the format, `--compact` and
+`--pretty` the layout of JSON. A caller that wraps a program sets a format
+and its own user adds another at the end of the line. The same option
+written twice is still a duplication of step 2: `--json --json`, `--format
+json --format text`.
 
 | Code | Boundary |
 | --- | --- |

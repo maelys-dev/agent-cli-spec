@@ -21,7 +21,7 @@
               {
                 "name": "COMMAND_ID",
                 "required": false,
-                "summary": "Stable command identifier whose help is shown.",
+                "summary": "Stable command identifier whose help is shown, the family of commands under an identifier, or `conventions`.",
                 "variadic": false
               }
             ],
@@ -35,7 +35,7 @@
             "properties": {
               "commands": {
                 "items": {
-                  "type": "object"
+                  "type": "string"
                 },
                 "type": "array"
               },
@@ -153,7 +153,7 @@
               {
                 "argument": {
                   "name": "PREFIX",
-                  "pattern": "^[a-z](?:[a-z0-9.-]*[a-z0-9-])?$",
+                  "pattern": "^[a-z]([a-z0-9.-]*[a-z0-9-])?$",
                   "type": "string"
                 },
                 "conflictsWith": [
@@ -165,7 +165,7 @@
                 "requires": [
                   "--summary"
                 ],
-                "summary": "Select one command namespace."
+                "summary": "Restrict the summary to one command namespace: the command named PREFIX and every command whose identifier starts with PREFIX followed by a dot."
               }
             ],
             "passthrough": false,
@@ -304,6 +304,24 @@
         {
           "available": true,
           "effect": "read",
+          "examples": [
+            {
+              "summary": "The commands installed manifests declare, one per line.",
+              "words": [
+                "commands",
+                "list"
+              ]
+            },
+            {
+              "summary": "The same with each manifest's path, version and availability.",
+              "words": [
+                "commands",
+                "list",
+                "--format",
+                "json"
+              ]
+            }
+          ],
           "exitCodes": {
             "0": "command completed",
             "1": "execution failed",
@@ -331,6 +349,9 @@
                 "items": {
                   "additionalProperties": false,
                   "properties": {
+                    "available": {
+                      "type": "boolean"
+                    },
                     "cliApi": {
                       "type": "integer"
                     },
@@ -349,6 +370,12 @@
                     "summary": {
                       "type": "string"
                     },
+                    "unavailableCode": {
+                      "type": "string"
+                    },
+                    "unavailableReason": {
+                      "type": "string"
+                    },
                     "version": {
                       "type": "string"
                     }
@@ -360,7 +387,8 @@
                     "version",
                     "summary",
                     "cliApi",
-                    "digestVerified"
+                    "digestVerified",
+                    "available"
                   ],
                   "type": "object"
                 },
@@ -386,6 +414,37 @@
             "apply": "apply",
             "plan": "preview"
           },
+          "examples": [
+            {
+              "summary": "Plan the installation in this project: every file is named, none is written.",
+              "words": [
+                "agents",
+                "install",
+                "."
+              ]
+            },
+            {
+              "summary": "Write the instructions Claude reads.",
+              "words": [
+                "agents",
+                "install",
+                ".",
+                "--client",
+                "claude",
+                "--apply"
+              ]
+            },
+            {
+              "summary": "The fingerprint of the plan, to give to --apply --expect.",
+              "words": [
+                "agents",
+                "install",
+                ".",
+                "--field",
+                "fingerprint"
+              ]
+            }
+          ],
           "exitCodes": {
             "0": "command completed",
             "1": "execution failed",
@@ -395,7 +454,15 @@
           "hidden": false,
           "id": "agents.install",
           "input": {
-            "constraints": [],
+            "constraints": [
+              {
+                "kind": "requires",
+                "options": [
+                  "--expect",
+                  "--apply"
+                ]
+              }
+            ],
             "operands": [
               {
                 "name": "PROJECT_DIR",
@@ -430,10 +497,27 @@
                 "required": false,
                 "requires": [],
                 "summary": "Apply the reviewed transaction; omission returns a read-only plan."
+              },
+              {
+                "argument": {
+                  "algorithms": [
+                    "sha256"
+                  ],
+                  "name": "FINGERPRINT",
+                  "type": "digest"
+                },
+                "conflictsWith": [],
+                "long": "--expect",
+                "repeatable": false,
+                "required": false,
+                "requires": [
+                  "--apply"
+                ],
+                "summary": "Apply only the plan this fingerprint names; a plan that has changed since is refused before anything is written."
               }
             ],
             "passthrough": false,
-            "synopsis": "agents install PROJECT_DIR [--client all|claude|codex] [--apply]"
+            "synopsis": "agents install PROJECT_DIR [--client all|claude|codex] [--apply] [--expect FINGERPRINT]"
           },
           "outputMode": "json-envelope",
           "outputSchema": {
@@ -484,6 +568,10 @@
                 },
                 "type": "array"
               },
+              "fingerprint": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
               "frameworkVersion": {
                 "type": "string"
               },
@@ -503,6 +591,7 @@
               "project",
               "client",
               "frameworkVersion",
+              "fingerprint",
               "files"
             ],
             "type": "object"
@@ -512,11 +601,21 @@
             "install"
           ],
           "purpose": "Install or refresh the maelys-cli agent instructions of a project.",
-          "usage": "agents install PROJECT_DIR [--client all|claude|codex] [--apply]"
+          "usage": "agents install PROJECT_DIR [--client all|claude|codex] [--apply] [--expect FINGERPRINT]"
         },
         {
           "available": true,
           "effect": "read",
+          "examples": [
+            {
+              "summary": "Say whether this project's instructions are current; exit 2 when they are not.",
+              "words": [
+                "agents",
+                "status",
+                "."
+              ]
+            }
+          ],
           "exitCodes": {
             "0": "command completed",
             "1": "execution failed",
@@ -698,6 +797,62 @@
           "summary": "Control ANSI colors on terminals."
         },
         {
+          "argument": {
+            "choices": [
+              "auto",
+              "always",
+              "never"
+            ],
+            "name": "VALUE",
+            "type": "choice"
+          },
+          "conflictsWith": [],
+          "default": "auto",
+          "long": "--progress",
+          "repeatable": false,
+          "required": false,
+          "requires": [],
+          "summary": "Show the progress of a long run on stderr in text mode: auto only when stderr is a terminal."
+        },
+        {
+          "conflictsWith": [],
+          "long": "--verbose",
+          "repeatable": false,
+          "required": false,
+          "requires": [],
+          "summary": "Add the details of the run on stderr in text mode; silent in JSON."
+        },
+        {
+          "argument": {
+            "choices": [
+              "auto",
+              "always",
+              "never"
+            ],
+            "name": "VALUE",
+            "type": "choice"
+          },
+          "conflictsWith": [],
+          "default": "auto",
+          "long": "--pager",
+          "repeatable": false,
+          "required": false,
+          "requires": [],
+          "summary": "Page the text rendering when stdout is a terminal; never in a pipe, in JSON or under --non-interactive."
+        },
+        {
+          "argument": {
+            "name": "NAME",
+            "type": "string"
+          },
+          "conflictsWith": [],
+          "long": "--field",
+          "repeatable": false,
+          "required": false,
+          "requires": [],
+          "summary": "Render one top-level member of data instead of the whole result, by the text or jsonl rendering rules."
+        },
+        {
           "conflictsWith": [],
           "long": "--help",
           "repeatable": false,
@@ -746,7 +901,7 @@
               {
                 "name": "COMMAND_ID",
                 "required": false,
-                "summary": "Stable command identifier whose help is shown.",
+                "summary": "Stable command identifier whose help is shown, the family of commands under an identifier, or `conventions`.",
                 "variadic": false
               }
             ],
@@ -760,7 +915,7 @@
             "properties": {
               "commands": {
                 "items": {
-                  "type": "object"
+                  "type": "string"
                 },
                 "type": "array"
               },
@@ -878,7 +1033,7 @@
               {
                 "argument": {
                   "name": "PREFIX",
-                  "pattern": "^[a-z](?:[a-z0-9.-]*[a-z0-9-])?$",
+                  "pattern": "^[a-z]([a-z0-9.-]*[a-z0-9-])?$",
                   "type": "string"
                 },
                 "conflictsWith": [
@@ -890,7 +1045,7 @@
                 "requires": [
                   "--summary"
                 ],
-                "summary": "Select one command namespace."
+                "summary": "Restrict the summary to one command namespace: the command named PREFIX and every command whose identifier starts with PREFIX followed by a dot."
               }
             ],
             "passthrough": false,
@@ -1029,6 +1184,25 @@
         {
           "available": true,
           "effect": "read",
+          "examples": [
+            {
+              "summary": "Greet Ada.",
+              "words": [
+                "greet",
+                "Ada"
+              ]
+            },
+            {
+              "summary": "Greet her twice, in capitals.",
+              "words": [
+                "greet",
+                "Ada",
+                "--shout",
+                "--times",
+                "2"
+              ]
+            }
+          ],
           "exitCodes": {
             "0": "command completed",
             "1": "execution failed",
@@ -1070,6 +1244,15 @@
                 "required": false,
                 "requires": [],
                 "summary": "Repeat the greeting."
+              },
+              {
+                "conflictsWith": [],
+                "hidden": true,
+                "long": "--trace",
+                "repeatable": false,
+                "required": false,
+                "requires": [],
+                "summary": "Report the parsed input on stderr; diagnostics."
               }
             ],
             "passthrough": false,
@@ -1102,6 +1285,22 @@
         {
           "available": true,
           "effect": "read",
+          "examples": [
+            {
+              "summary": "Echo four typed values, one option being repeated.",
+              "words": [
+                "limits",
+                "--level",
+                "high",
+                "--memory",
+                "512M",
+                "--tag",
+                "build",
+                "--tag",
+                "nightly"
+              ]
+            }
+          ],
           "exitCodes": {
             "0": "command completed",
             "1": "execution failed",
@@ -1131,7 +1330,6 @@
             "options": [
               {
                 "argument": {
-                  "maximum": 18446744073709551615,
                   "minimum": 1,
                   "name": "BYTES",
                   "type": "size"
@@ -1146,8 +1344,6 @@
               },
               {
                 "argument": {
-                  "maximum": 18446744073709551615,
-                  "minimum": 0,
                   "name": "DURATION",
                   "type": "duration"
                 },
@@ -1290,6 +1486,29 @@
             "apply": "apply",
             "plan": "preview"
           },
+          "examples": [
+            {
+              "summary": "Plan the note: nothing is written.",
+              "words": [
+                "note",
+                "write",
+                "/tmp/note.txt",
+                "--content",
+                "hello"
+              ]
+            },
+            {
+              "summary": "Write it.",
+              "words": [
+                "note",
+                "write",
+                "/tmp/note.txt",
+                "--content",
+                "hello",
+                "--apply"
+              ]
+            }
+          ],
           "exitCodes": {
             "0": "command completed",
             "1": "execution failed",
@@ -1299,7 +1518,15 @@
           "hidden": false,
           "id": "note.write",
           "input": {
-            "constraints": [],
+            "constraints": [
+              {
+                "kind": "requires",
+                "options": [
+                  "--expect",
+                  "--apply"
+                ]
+              }
+            ],
             "operands": [
               {
                 "name": "FILE",
@@ -1336,10 +1563,27 @@
                 "required": false,
                 "requires": [],
                 "summary": "Apply the reviewed transaction; omission returns a read-only plan."
+              },
+              {
+                "argument": {
+                  "algorithms": [
+                    "sha256"
+                  ],
+                  "name": "FINGERPRINT",
+                  "type": "digest"
+                },
+                "conflictsWith": [],
+                "long": "--expect",
+                "repeatable": false,
+                "required": false,
+                "requires": [
+                  "--apply"
+                ],
+                "summary": "Apply only the plan this fingerprint names; a plan that has changed since is refused before anything is written."
               }
             ],
             "passthrough": false,
-            "synopsis": "note write FILE --content TEXT [--replace] [--apply]"
+            "synopsis": "note write FILE --content TEXT [--replace] [--apply] [--expect FINGERPRINT]"
           },
           "outputMode": "json-envelope",
           "outputSchema": {
@@ -1351,6 +1595,10 @@
               },
               "changed": {
                 "type": "boolean"
+              },
+              "fingerprint": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
               },
               "mode": {
                 "enum": [
@@ -1383,6 +1631,7 @@
               "changed",
               "path",
               "bytes",
+              "fingerprint",
               "precondition"
             ],
             "type": "object"
@@ -1392,11 +1641,23 @@
             "write"
           ],
           "purpose": "Store a note in a file.",
-          "usage": "note write FILE --content TEXT [--replace] [--apply]"
+          "usage": "note write FILE --content TEXT [--replace] [--apply] [--expect FINGERPRINT]"
         },
         {
           "available": true,
           "effect": "read",
+          "examples": [
+            {
+              "summary": "The first two records, one JSON object per line.",
+              "words": [
+                "list",
+                "--limit",
+                "2",
+                "--format",
+                "jsonl"
+              ]
+            }
+          ],
           "exitCodes": {
             "0": "command completed",
             "1": "execution failed",
@@ -1412,7 +1673,6 @@
               {
                 "argument": {
                   "maximum": 1000,
-                  "minimum": 0,
                   "name": "N",
                   "type": "unsigned"
                 },
@@ -1574,6 +1834,16 @@
         {
           "available": true,
           "effect": "stream",
+          "examples": [
+            {
+              "summary": "Run a program and relay its output.",
+              "words": [
+                "run",
+                "/bin/echo",
+                "hello"
+              ]
+            }
+          ],
           "exitCodes": {
             "0": "command completed",
             "1": "execution failed",
@@ -1615,6 +1885,17 @@
         {
           "available": true,
           "effect": "execute",
+          "examples": [
+            {
+              "summary": "Hand `inspect --platform linux/arm64` to the helper.",
+              "words": [
+                "image",
+                "inspect",
+                "--platform",
+                "linux/arm64"
+              ]
+            }
+          ],
           "exitCodes": {
             "0": "command completed",
             "1": "execution failed",
@@ -1717,6 +1998,62 @@
           "required": false,
           "requires": [],
           "summary": "Control ANSI colors on terminals."
+        },
+        {
+          "argument": {
+            "choices": [
+              "auto",
+              "always",
+              "never"
+            ],
+            "name": "VALUE",
+            "type": "choice"
+          },
+          "conflictsWith": [],
+          "default": "auto",
+          "long": "--progress",
+          "repeatable": false,
+          "required": false,
+          "requires": [],
+          "summary": "Show the progress of a long run on stderr in text mode: auto only when stderr is a terminal."
+        },
+        {
+          "conflictsWith": [],
+          "long": "--verbose",
+          "repeatable": false,
+          "required": false,
+          "requires": [],
+          "summary": "Add the details of the run on stderr in text mode; silent in JSON."
+        },
+        {
+          "argument": {
+            "choices": [
+              "auto",
+              "always",
+              "never"
+            ],
+            "name": "VALUE",
+            "type": "choice"
+          },
+          "conflictsWith": [],
+          "default": "auto",
+          "long": "--pager",
+          "repeatable": false,
+          "required": false,
+          "requires": [],
+          "summary": "Page the text rendering when stdout is a terminal; never in a pipe, in JSON or under --non-interactive."
+        },
+        {
+          "argument": {
+            "name": "NAME",
+            "type": "string"
+          },
+          "conflictsWith": [],
+          "long": "--field",
+          "repeatable": false,
+          "required": false,
+          "requires": [],
+          "summary": "Render one top-level member of data instead of the whole result, by the text or jsonl rendering rules."
         },
         {
           "conflictsWith": [],

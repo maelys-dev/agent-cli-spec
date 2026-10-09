@@ -305,35 +305,59 @@ def check_failure(report: Report, name: str, completed: subprocess.CompletedProc
     report.add(name, got == code, "" if got == code else f"code {got}, expected {code}")
 
 
+WIDTHS = {"sha1": 40, "sha256": 64, "sha384": 96, "sha512": 128}
+LIMIT = 2 ** 64 - 1
+
+
 def value_problem(declaration: dict, value: str) -> str:
-    """Why a value is not of the kind its declaration gives, or "". Only what section 3 fixes is judged: a kind
-    whose grammar the contract leaves to the implementation (`size`, `duration`, `hex`) is accepted when non-empty."""
+    """Why a value is not of the kind its declaration gives, by the grammars of section 3, or "". A digit is
+    `0` to `9`: Python's `\\d` also takes the digits of other scripts, which no kind accepts."""
     kind = declaration.get("type")
-    if value == "":
-        return "an empty value"
+    if value == "" and kind not in (None, "string"):
+        return "an empty value"  # any text is a string, the empty one included; no other kind has an empty value
     if declaration.get("choices") and value not in declaration["choices"]:
         return f"{value!r} is not among {declaration['choices']}"
     if kind == "boolean" and value not in ("true", "false"):
         return f"{value!r} is not true or false"
+    number = None
     if kind in ("integer", "unsigned"):
-        if re.fullmatch(r"\d+" if kind == "unsigned" else r"-?\d+", value) is None:
-            return f"{value!r} is not {'an unsigned' if kind == 'unsigned' else 'an'} integer"
+        if re.fullmatch(r"[0-9]+" if kind == "unsigned" else r"-?[0-9]+", value) is None:
+            return f"{value!r} is not {'an unsigned' if kind == 'unsigned' else 'an'} integer in decimal"
         number = int(value)
+        if not (0 if kind == "unsigned" else -2 ** 63) <= number <= (LIMIT if kind == "unsigned" else 2 ** 63 - 1):
+            return f"{value} does not fit 64 bits"
+    if kind == "size":
+        match = re.fullmatch(r"([0-9]+)([KMGT]?)", value)
+        if match is None:
+            return f"{value!r} is not digits and at most one suffix among K, M, G, T, in upper case"
+        number = int(match.group(1)) * 1024 ** " KMGT".index(match.group(2) or " ")
+        if number > LIMIT:
+            return f"{value} does not fit 64 bits"
+    if kind == "duration":
+        match = re.fullmatch(r"([0-9]+)(ms|s|m|h|d)", value)
+        if match is None:
+            return f"{value!r} is not digits and one unit among ms, s, m, h, d"
+        if int(match.group(1)) * {"ms": 1, "s": 1000, "m": 60000, "h": 3600000, "d": 86400000}[match.group(2)] > LIMIT:
+            return f"{value} does not fit 64 bits of milliseconds"
+    if number is not None:
         for bound, beyond in (("minimum", number < declaration.get("minimum", number)),
                               ("maximum", number > declaration.get("maximum", number))):
             if beyond:
                 return f"{value} is beyond the {bound} {declaration[bound]}"
     if kind == "absolute-path" and not value.startswith("/"):
         return f"{value!r} is not an absolute path"
-    if kind == "sha256" and re.fullmatch(r"[0-9a-fA-F]{64}", value) is None:
-        return f"{value!r} is not 64 hexadecimal digits"
+    widths = declaration.get("digits")
+    widths = [widths] if isinstance(widths, int) else widths
+    if kind == "sha256" and re.fullmatch(r"[0-9a-f]{64}", value) is None:
+        return f"{value!r} is not 64 lower-case hexadecimal digits"
+    if kind == "hex" and (re.fullmatch(r"[0-9a-f]+", value) is None or (widths and len(value) not in widths)):
+        return f"{value!r} is not lower-case hexadecimal digits" + (f", {widths} of them" if widths else "")
     if kind == "digest":
         algorithm, colon, digits = value.partition(":")
-        widths = declaration.get("digits")
-        widths = [widths] if isinstance(widths, int) else widths
         if not colon or algorithm not in declaration.get("algorithms", [algorithm]) \
-                or re.fullmatch(r"[0-9a-fA-F]+", digits) is None or (widths and len(digits) not in widths):
-            return f"{value!r} is not a digest of {declaration.get('algorithms')}"
+                or re.fullmatch(r"[0-9a-f]+", digits) is None or (widths and len(digits) not in widths) \
+                or len(digits) != WIDTHS.get(algorithm, len(digits)):
+            return f"{value!r} is not a digest of {declaration.get('algorithms')}, in lower case and of its algorithm's width"
     if kind in ("string", "path") and isinstance(declaration.get("pattern"), str):
         try:
             if compile_pattern(declaration["pattern"]).search(value) is None:
@@ -365,7 +389,10 @@ def example_issues(command: dict, global_options: list[dict], words: list[str]) 
             operands += rest[index:]
             break
         if not word.startswith("--"):
-            operands.append(word)
+            if word.startswith("-") and word != "-":
+                issues.append(f"--: {word} starts with one dash and is neither an option nor an operand")
+            else:
+                operands.append(word)
             continue
         name, equals, value = word.partition("=")
         option = declared.get(name)
@@ -720,6 +747,12 @@ def check_completion_scripts(report: Report, program: Program, catalog: dict, co
     # the first words of a command of several words, where a script must offer the next one
     longer = [item["pattern"] for item in plain if len(item["pattern"]) > 1][:3]
     cases += [[*pattern[:-1], ""] for pattern in longer] + [[*pattern[:-1], pattern[-1][:1]] for pattern in longer]
+    # where a choice is expected: after an option that has some, and where an operand that has some begins
+    chosen = [(item, option) for item in plain for option in item["input"]["options"] + catalog["globalOptions"]
+              if option.get("argument", {}).get("choices") and not option.get("hidden")][:2]
+    cases += [[*item["pattern"], option["long"], ""] for item, option in chosen]
+    cases += [[*item["pattern"], ""] for item in plain
+              if item["input"]["operands"] and item["input"]["operands"][0].get("choices")][:2]
     cases = [words for index, words in enumerate(cases) if words not in cases[:index]]
     oracle = []
     for words in cases:
@@ -1312,6 +1345,23 @@ def _run_kit(program: Program, report: Report) -> Report:
     # ---- the order of the refusals, around --help and --version (sections 6 and 8) ----
     check_failure(report, "version with an operand fails with VALIDATION_FAILED",
                   program.run("version", "kit-extra-operand", "--json"), "VALIDATION_FAILED")
+    # on `help`, which takes an identifier: a program that reads `-x` as an operand answers INVALID_COMMAND
+    check_failure(report, "a word that starts with one dash is refused with VALIDATION_FAILED",
+                  program.run("help", "-x", "--json"), "VALIDATION_FAILED")
+    # two options that set the same thing: the last one written wins (section 8)
+    last_text = program.run("version", "--json", "--format", "text", "--non-interactive")
+    last_json = program.run("version", "--format", "text", "--json", "--non-interactive")
+    report.add("the last written of --json and --format wins",
+               last_text.returncode == 0 and not last_text.stdout.lstrip().startswith("{")
+               and last_json.returncode == 0 and last_json.stdout.lstrip().startswith("{"),
+               f"--json --format text: {last_text.stdout[:40]!r}; --format text --json: {last_json.stdout[:40]!r}")
+    indented = program.run("version", "--json", "--compact", "--pretty")
+    single = program.run("version", "--json", "--pretty", "--compact")
+    report.add("the last written of --compact and --pretty wins",
+               indented.returncode == 0 and indented.stdout.count("\n") > 1
+               and single.returncode == 0 and single.stdout.count("\n") <= 1,
+               f"--compact --pretty: {indented.stdout.count(chr(10))} lines; --pretty --compact: "
+               f"{single.stdout.count(chr(10))} lines")
     check_failure(report, "--version after a command fails with VALIDATION_FAILED",
                   program.run("help", "--version", "--json"), "VALIDATION_FAILED")
     check_failure(report, "help of an unknown identifier fails with INVALID_COMMAND",
@@ -1450,6 +1500,26 @@ def _run_kit(program: Program, report: Report) -> Report:
                 offered = set()
             report.add(f"__complete after {' '.join(given)} offers the next word of its commands", following <= offered,
                        f"missing {sorted(following - offered)}, offered {sorted(offered)[:8]}")
+        # section 6, "choices": of an option's value after that option, of an operand where it begins
+        expecting = []
+        for command in commands:
+            if command["hidden"] or not command["available"] or command["external"] or command["input"]["passthrough"]:
+                continue
+            for option in command["input"]["options"] + catalog["globalOptions"]:
+                if option.get("argument", {}).get("choices") and not option.get("hidden"):
+                    expecting.append(([*command["pattern"], option["long"]], option["argument"]["choices"]))
+                    break
+            first = command["input"]["operands"][:1]
+            if first and first[0].get("choices"):
+                expecting.append((command["pattern"], first[0]["choices"]))
+        for given, choices in expecting[:1] + [entry for entry in expecting if entry[0][-1][:2] != "--"][:2]:
+            answer = program.run("__complete", "--format", "json", "--non-interactive", "--", *given, "")
+            try:
+                offered = {record["word"] for record in parse_json(answer.stdout)["data"]["records"]}
+            except (ValueError, KeyError, TypeError):
+                offered = set()
+            report.add(f"__complete after {' '.join(given)} offers the declared choices", set(choices) <= offered,
+                       f"missing {sorted(set(choices) - offered)}, offered {sorted(offered)[:8]}")
         excluded = {command["pattern"][0] for command in commands if command["hidden"] or not command["available"]} - visible
         report.add("__complete omits hidden and unavailable command words", not excluded & words,
                    f"unexpected {excluded & words}")

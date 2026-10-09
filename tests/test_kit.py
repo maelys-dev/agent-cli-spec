@@ -47,9 +47,8 @@ class ValidatorTest(unittest.TestCase):
         self.assertTrue(validate([1, "a"], {"type": "array", "items": {"type": "integer"}}))
 
     def test_example_contract_matches_the_descriptor_schema(self) -> None:
-        # maelys-cli's committed contract, at the trunk of the tag maelys-cli pins (2.2.1: no --progress,
-        # --verbose nor --pager yet, so the kit would fail it on "catalog lists the global options").
-        # The schema checks the shape of the document, not the presence of the trunk options; the kit does.
+        # maelys-cli's committed contract (its docs/cli-contract.json at v0.6.5): the catalogs of two real
+        # programs, held against the schema so that a rule added here is tried on declarations nobody wrote for it.
         example = json.loads((ROOT / "examples" / "maelys-cli.contract.json").read_text())
         for program in example["programs"].values():
             document = {**program, "version": "0.0.0", "framework": "example"}
@@ -73,7 +72,7 @@ class ValidatorTest(unittest.TestCase):
         document.pop("invariants", None)
         document.pop("output", None)
         document["commands"] = [
-            {key: value for key, value in command.items() if key not in ("outputSchema", "exitCodes")}
+            {key: value for key, value in command.items() if key not in ("outputSchema", "exitCodes", "examples")}
             for command in document["commands"]
             if command["id"] == "agents" or command["id"].startswith("agents.")
         ]
@@ -83,6 +82,27 @@ class ValidatorTest(unittest.TestCase):
                                  SCHEMAS["describe"]))
         self.assertTrue(validate({**document, "filter": {"kind": "command-prefix", "value": "Agents"}},
                                  SCHEMAS["describe"]))
+
+    def test_what_a_descriptor_may_not_declare(self) -> None:
+        """An identifier is segments separated by single dots and is never `unknown`; `preview`, `apply` and
+        `commit` live in a transaction only; `passthrough` goes with `external`."""
+        reference = json.loads((ROOT / "examples" / "reference.describe.json").read_text())
+        self.assertEqual(validate(reference, SCHEMAS["describe"]), [])
+
+        def with_first(**members) -> list:
+            first = {**reference["commands"][0], **members}
+            return validate({**reference, "commands": [first, *reference["commands"][1:]]}, SCHEMAS["describe"])
+        for identifier in ("note.write", "a", "a-b.c2", "a.2b"):
+            self.assertEqual(with_first(id=identifier), [], identifier)
+        for identifier in ("unknown", "note.", "note..write", ".note", "2a", "Note", "a_b", "a.-b"):
+            self.assertTrue(with_first(id=identifier), identifier)
+        for effect in ("preview", "apply", "commit"):
+            self.assertTrue(with_first(effect=effect), effect)
+        self.assertEqual(with_first(effect={"plan": "preview", "apply": "commit"}), [])
+        reading = reference["commands"][0]
+        self.assertTrue(with_first(input={**reading["input"], "passthrough": True}))
+        delegate = next(command for command in reference["commands"] if command["external"])
+        self.assertTrue(delegate["input"]["passthrough"])
 
     def test_hidden_option_schema(self) -> None:
         example = json.loads((ROOT / "examples" / "maelys-cli.contract.json").read_text())
@@ -122,20 +142,22 @@ class CoverageTest(unittest.TestCase):
 
     def expected(self):
         names, values = set(), set()
-        def walk(node):
+        def walk(node, forbidden=False):
             if not isinstance(node, dict):
                 return
             for name, child in node.get("properties", {}).items():
                 names.add(name)
-                walk(child)
+                walk(child, forbidden)
             for child in node.get("definitions", {}).values():
-                walk(child)
+                walk(child, forbidden)
             for key in ("items", "additionalProperties", "not", "if", "then", "else"):
                 if isinstance(node.get(key), dict):
-                    walk(node[key])
+                    walk(node[key], forbidden or key == "not")
             for key in ("oneOf", "anyOf", "allOf"):
                 for child in node.get(key, []):
-                    walk(child)
+                    walk(child, forbidden)
+            if forbidden:
+                return  # a value the schema forbids (`unknown` as an identifier) is not one a document carries
             values.update(item for item in node.get("enum", []) if isinstance(item, str))
             if isinstance(node.get("const"), str):
                 values.add(node["const"])
@@ -244,6 +266,9 @@ class KitTest(unittest.TestCase):
                                  ("completion-tty-writes", "on a terminal writes nothing"),
                                  ("completion-stale-word", "offers the words of __complete"),
                                  ("completion-first-word-only", "offers the next word of its commands"),
+                                 ("completion-no-choices", "offers the declared choices"),
+                                 ("json-always-wins", "the last written of --json and --format"),
+                                 ("dash-is-an-operand", "a word that starts with one dash"),
                                  ("completion-no-fallback", "falls back to file completion"),
                                  ("completion-static-no-version", "carries the catalog version")):
             with self.subTest(defect=defect):

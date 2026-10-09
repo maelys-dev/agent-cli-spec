@@ -58,10 +58,20 @@ def valid_value(declaration: dict) -> str | None:
     return next((value for value in candidates if not value_problem(declaration, value)), None)
 
 
+WRONG = ("no-such-choice", "maybe", "-1", "+1", "x", "relative/path", "md5:00", "sha256:ab", "abc", "ABCDEF", "!",
+         "99999999", "1.5M", "1KiB", "1m", "16777216T", "5", "1h30m", "5S", "213503982335d", "9223372036854775808",
+         "18446744073709551616", "\u0663", "\u0661M", "\u0665s", "0x10", "1e1", "")
+
+
+def invalid_values(declaration: dict) -> list[str]:
+    """Values the declared kind refuses, one of each way of being wrong the judge of section 3 can tell: a digit
+    of another script, a number beyond 64 bits, a digest too short, a suffix or a unit that is none."""
+    return [value for value in WRONG if value_problem(declaration, value)]
+
+
 def invalid_value(declaration: dict) -> str | None:
-    """A value the declared kind refuses, or None when the kit's judge cannot tell one."""
-    candidates = ["no-such-choice", "maybe", "-1", "x", "relative/path", "md5:00", "abc", "!", "99999999"]
-    return next((value for value in candidates if value_problem(declaration, value)), None)
+    """A value the declared kind refuses, or None when the judge cannot tell one."""
+    return next(iter(invalid_values(declaration)), None)
 
 
 def opaque(command: dict) -> bool:
@@ -94,6 +104,11 @@ def lines(command: dict, rng: random.Random, count: int) -> list[list[str]]:
     found += [base + ["--", "--help"], base + ["--", "--version"], base + ["--help", "--", "kit"],
               base + ["--help=false"], base + ["--help=true"], base + ["--help=false", "--json"],
               base + ["--json=false"], base + ["--help", "--help"], base + ["--help", "--field", "commands", "--json"]]
+    # no short option: one dash and more is refused before `--`, `-` alone and anything after `--` are operands
+    found += [base + ["-x"], base + ["-h"], base + ["-5"], base + ["-"], base + ["--", "-x"], ["-x"] + base]
+    # two options that set the same thing: the last one written wins
+    found += [base + ["--json", "--format", "text"], base + ["--format", "text", "--json"],
+              base + ["--json", "--compact", "--pretty"], base + ["--json", "--pretty", "--compact"]]
     for place, item in enumerate(options):
         found += [base + spelled(item), base + spelled(item) + spelled(item), base + spelled(item, wrong=True),
                   base + [item["long"]], base + spelled(item) + ["--help"], base + spelled(item) + ["--version"],
@@ -106,6 +121,13 @@ def lines(command: dict, rng: random.Random, count: int) -> list[list[str]]:
             found += [base + [joined], base + [joined, "--help"], base + [joined, "--format", "jsonl"]]
         else:
             found += [base + [f"{item['long']}=true"], base + [f"{item['long']}=false", "--help"]]
+        found += [base + [item["long"], wrong] for wrong in invalid_values(item.get("argument") or {"type": "boolean"})
+                  if item.get("argument")]
+    for place, item in enumerate(command["input"]["operands"]):
+        if item.get("type"):
+            given = [valid_value(entry) or "kit" for entry in command["input"]["operands"][:place]]
+            found += [list(command["pattern"]) + given + [wrong] + base[len(command["pattern"]) + len(operands):]
+                      for wrong in invalid_values(item) if not wrong.startswith("-")]
     for _ in range(count):
         line = list(command["pattern"])
         line += operands[:rng.choice([len(operands)] * 4 + [max(0, len(operands) - 1)])]
@@ -175,8 +197,15 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
     before = before_separator(words)
     code, out, err = completed.returncode, completed.stdout, completed.stderr
     formats = [before[index + 1] for index, word in enumerate(before[:-1]) if word == "--format"]
-    formats += [word.partition("=")[2] for word in before if word.startswith("--format=")]
-    chosen = "json" if flag(before, "--json") else formats[-1] if formats else default
+    # section 8: of the options that set the format, the last one written wins
+    chosen = default
+    for place, word in enumerate(before):
+        if word == "--format" and place + 1 < len(before):
+            chosen = before[place + 1]
+        elif word.startswith("--format="):
+            chosen = word.partition("=")[2]
+        elif word in ("--json", "--json=true"):
+            chosen = "json"
     json_mode, formats = chosen == "json", [chosen]
     asks = flag(before, "--help")
     # ---- what holds for every line ----
@@ -258,12 +287,14 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
 
 
 ALONE = {"an undeclared option", "--version after a command", "a repeated option", "an option without its value",
+         "a word that starts with one dash",
          "a flag with a value that is not true or false", "a value that is not of the declared kind"}
 
 
 def kind(issue: str) -> str:
     """The rule an issue of `example_issues` is about, without the words of the line."""
-    for needle, rule in (("--version is not an option", "--version after a command"),
+    for needle, rule in (("starts with one dash", "a word that starts with one dash"),
+                         ("--version is not an option", "--version after a command"),
                          ("operands where", "a wrong number of operands"), ("is not an option", "an undeclared option"),
                          ("is required", "a missing required option"), ("not repeatable", "a repeated option"),
                          ("has no value", "an option without its value"), ("requires", "an unmet requires"),

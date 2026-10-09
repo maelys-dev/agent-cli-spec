@@ -71,7 +71,7 @@
       "patternProperties": {"^x-": {}},
       "additionalProperties": false
     },
-    "effect": {"enum": ["read", "preview", "apply", "commit", "execute", "stream"]},
+    "effect": {"enum": ["read", "execute", "stream"]},
     "transaction": {
       "type": "object",
       "required": ["plan", "apply"],
@@ -185,10 +185,13 @@
          "then": {"properties": {"outputMode": {"const": "protocol-stream"}}}},
         {"if": {"properties": {"external": {"const": true}}},
          "then": {"properties": {"outputMode": {"const": "protocol-stream"}, "effect": {"const": "execute"}},
-                  "not": {"required": ["protocol"]}}}
+                  "not": {"required": ["protocol"]}}},
+        {"if": {"properties": {"input": {"properties": {"passthrough": {"const": true}}, "required": ["passthrough"]}},
+                "required": ["input"]},
+         "then": {"properties": {"external": {"const": true}}}}
       ],
       "properties": {
-        "id": {"type": "string", "pattern": "^[a-z][a-z0-9.-]*$"},
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$", "not": {"const": "unknown"}},
         "pattern": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
         "usage": {"type": "string", "minLength": 1},
         "purpose": {"type": "string", "minLength": 1},
