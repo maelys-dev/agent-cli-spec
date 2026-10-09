@@ -13,13 +13,7 @@ import invocations
 
 # What the reference program still does that the contract forbids, each with the reason it stands. A gap
 # that closes fails the test until its line is removed, so the list cannot outlive what it records.
-KNOWN_GAPS = {
-    "accepts a wrong number of operands":
-        "section 8 lists operand arity among the refusals; the fixture's parser has no notion of it",
-    "accepts --version after a command":
-        "section 6 gives --version one meaning, alone on the line; after a command it is an option the command "
-        "does not declare, which the fixture ignores instead of refusing",
-}
+KNOWN_GAPS: dict[str, str] = {}
 
 
 def survey(program, count: int) -> dict[str, list[str]]:
@@ -59,7 +53,11 @@ class GeneratedInvocationsTest(unittest.TestCase):
                                  ("expect-after-write", "failure-writes"), ("install-plan-writes", "plan-writes"),
                                  ("text-on-stderr", "success-stderr"), ("empty-command", "envelope-command"),
                                  ("help-names-command", "envelope-command"), ("envelope-types", "envelope"),
-                                 ("verbose-json", "success-stderr")):
+                                 ("verbose-json", "success-stderr"),
+                                 ("arity-unchecked", "accepts a wrong number of operands"),
+                                 ("version-ignored", "accepts --version after a command"),
+                                 ("help-checks-arity", "help-refused"), ("help-jsonl-silent", "help-jsonl"),
+                                 ("unavailable-runs", "unavailable-runs")):
             with self.subTest(defect=defect):
                 self.assertIn(expected, set(survey(FixtureProgram(defect), count=1)) - clean)
 

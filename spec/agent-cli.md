@@ -90,7 +90,7 @@ an invocation from `input`, never from help text.
 | `protocol` | the named protocol owning stdio (`git-smart`, `mcp-json-rpc`), when a `protocol-stream` command declares one; a command that merely relays a child's stdio declares none |
 | `external` | `true` when the catalog does not own what follows the pattern: those words are handed verbatim to another executable (section 9). Such a command, a delegate, declares the effect `execute` and no `protocol` |
 | `hidden` | `true` when the command is not shown to humans |
-| `available` | `false` when this build cannot run the command; then `unavailableReason` says why |
+| `available` | `false` when this build cannot run the command; then `unavailableReason` says why, and invoking the command fails instead of running it (section 8) |
 | `input` | `synopsis`, `operands`, `options`, `constraints`, `passthrough` |
 | `examples` | invocations the command accepts, each `{"words": [...], "summary": ...}`; optional |
 | `outputSchema` | a JSON Schema of `data` on success |
@@ -379,9 +379,24 @@ run.
 | `complete.candidates` | `__complete -- WORDS...`, hidden, `json-records` | `{"count": N, "records": [{"word": ...}]}` |
 | `completion.install` | `completion install SHELL [--apply]`, reserved: offered or not | `mode`, `shell`, `files`, `catalog`, `activate` |
 
+`--help` and `--version` are `help` and `version` spelled as options: as the
+first word of the line each selects its command. `help` of an identifier the
+catalog does not have fails with `INVALID_COMMAND`, as `describe` does.
+`--version` has no other place: after a command it is an option that command
+does not declare, and the line fails with `VALIDATION_FAILED` like any other
+such line, so that a program asked its version never runs something else.
+
 `--help` after the words of a command gives the help of that command, as
 `help COMMAND_ID` does, and the command does not run, whatever else the line
 carries, `--apply` included: asking how a command is used never performs it.
+It works on an incomplete line, which is when help is asked: what the line
+as a whole lacks, a required option, an operand, an option another one
+requires, is not held against it. What one option says alone still is: an
+option the command does not have, a repeated one or a value of the wrong
+kind fails first and names the command (section 8). From there on the line
+is rendered as `help` is: `--format jsonl` without `--field` is refused as it
+is for `help`, the help not being records, and `--field commands` renders the
+identifier.
 The envelope then names `help`, the command whose data it carries: that
 `data` is the help's and would not validate against the `outputSchema` of the
 command asked about. A line that fails instead, on an option the command does
@@ -511,12 +526,29 @@ in `data`). A negative authorization decision is a successful read, never
 exit 1. A stream command or a delegate propagates the exit status of the
 underlying process, `128 + signal` on signal termination.
 
-Errors are reported in this causal order: command resolution
-(`INVALID_COMMAND`); option spelling, support by the command, duplication;
-option value kind, range, choice; option dependencies and conflicts;
-required options; operand arity and kinds; rendering constraints; then,
-inside the command, file type and permissions, syntax, schema, policy, state
-and concurrency preconditions.
+Errors are reported in this causal order:
+
+1. command resolution (`INVALID_COMMAND`);
+2. what one option says alone: its spelling, its support by the command, its
+   duplication, the kind, range and choice of its value;
+3. `--help` on the line, when the command is neither a delegate nor
+   `passthrough`: the help of the command is what is rendered, steps 4 and 5
+   are skipped and step 6 is that of `help` (section 6);
+4. what the line says as a whole: option dependencies and conflicts,
+   required options, operand arity and kinds;
+5. availability: a command whose `available` is `false` fails here and does
+   not run, with `UNSUPPORTED` when the function is absent from this build
+   or version, or with the listed code that names the cause better
+   (`NOT_FOUND` for a helper that is not installed), the message carrying
+   the reason. `describe` and `help` still answer for it;
+6. rendering constraints;
+7. inside the command: file type and permissions, syntax, schema, policy,
+   state and concurrency preconditions.
+
+A failure of steps 1 to 5 names the command the line resolved, or `unknown`.
+An implementation MAY report availability earlier than step 5, an
+unavailable command having nothing to say about its line; it MUST NOT run
+the command.
 
 | Code | Boundary |
 | --- | --- |

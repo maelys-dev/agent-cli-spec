@@ -533,8 +533,10 @@ def main(argv):
     compact = options.get("--compact") in (True, "true") or options.get("--pretty") == "false"
     if options.get("--help") in (True, "true") and not words:
         words = ["help"]
-    if options.get("--version") in (True, "true") and not words:
-        words = ["version"]
+    if options.get("--version") is True and (argv[:1] == ["--version"] or BREAK == "version-ignored" and not words):
+        # Section 6: --version is `version` spelled as an option, as the first word of the line and nowhere else.
+        words = ["version"] + words
+        del options["--version"]
     by_id = {item["id"]: item for item in CATALOG}
     selected = None
     for item in CATALOG:
@@ -547,7 +549,7 @@ def main(argv):
     if isinstance(selected["effect"], dict) and ("--dry-run" in options or "--plan" in options):
         return fail(selected["id"], "VALIDATION_FAILED", "The command plans by default; use --apply to apply.", fmt, compact)
     for name in options:
-        if name not in known and name != "--version":
+        if name not in known and not (name == "--version" and BREAK == "version-ignored"):
             return fail(selected["id"], "VALIDATION_FAILED", f"Option {name} is not supported by '{selected['id']}'.", fmt, compact)
     if duplicates:
         return fail(selected["id"], "VALIDATION_FAILED", f"Duplicate option {duplicates[0]}.", fmt, compact)
@@ -559,6 +561,39 @@ def main(argv):
             options[name] = value is True or value == "true"
         elif argument.get("type") == "choice" and value not in argument["choices"]:
             return fail(selected["id"], "VALIDATION_FAILED", f"Invalid choice for {name}.", fmt, compact)
+        elif argument.get("type") == "digest":
+            algorithm, _, digits = str(value).partition(":")
+            widths = argument.get("digits")
+            widths = [widths] if isinstance(widths, int) else widths
+            if algorithm not in argument["algorithms"] or re.fullmatch(r"[0-9a-f]+", digits) is None \
+                    or (widths and len(digits) not in widths):
+                return fail(selected["id"], "VALIDATION_FAILED", f"{name} takes a digest of {argument['algorithms']}.",
+                            fmt, compact)
+
+    def arity(command, given):
+        """Section 8: the number of operands, where the catalog owns the line."""
+        expected = command["input"]["operands"]
+        needed = sum(1 for item in expected if item["required"])
+        if command["input"]["passthrough"] or BREAK == "arity-unchecked":
+            return None
+        if len(given) < needed or (len(given) > len(expected) and not (expected and expected[-1]["variadic"])):
+            return f"'{command['id']}' takes {needed if needed == len(expected) else f'{needed} to {len(expected)}'} " \
+                   f"operands, not {len(given)}."
+        return None
+    if BREAK == "help-checks-arity" and arity(selected, operands):
+        return fail(selected["id"], "VALIDATION_FAILED", arity(selected, operands), fmt, compact)
+    # Section 8: what one option says alone is judged first and names the command; then --help gives the help
+    # of the command, and what the line as a whole lacks is no longer asked. The envelope names help.
+    helped = options.get("--help") is True and selected["id"] != "help" and not selected["input"]["passthrough"] \
+        and BREAK != "help-runs"
+    named = selected["id"]
+    if helped:
+        named = selected["id"] if BREAK == "help-names-command" else "help"
+        operands, selected = [selected["id"]], by_id["help"]
+        if BREAK == "help-jsonl-silent" and fmt == "jsonl" and "--field" not in options:
+            return 0
+    if arity(selected, operands):
+        return fail(selected["id"], "VALIDATION_FAILED", arity(selected, operands), fmt, compact)
     if "--field" in options and fmt == "json":
         return fail(selected["id"], "VALIDATION_FAILED", "--field is not available with --format json.", fmt, compact)
     if "--field" in options and selected["effect"] != "read" and BREAK != "field-after-write":
@@ -582,13 +617,10 @@ def main(argv):
             return fail("describe", "VALIDATION_FAILED", "--prefix is not a valid command prefix.", fmt, compact)
     if fmt == "jsonl" and selected["outputMode"] != "json-records" and "--field" not in options:
         return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
-    if options.get("--help") is True and selected["id"] != "help" and not selected["input"]["passthrough"] \
-            and BREAK != "help-runs":
-        # Section 6: --help after a command gives its help, and the command does not run. The envelope names help.
-        named = selected["id"] if BREAK == "help-names-command" else "help"
-        operands, selected = [selected["id"]], by_id["help"]
-    else:
-        named = selected["id"]
+    if not selected["available"] and BREAK != "unavailable-runs":
+        # Section 2: this build cannot run the command, so it does not; describe and help still answer for it.
+        return fail(selected["id"], "UNSUPPORTED", f"'{selected['id']}' is not available: {selected['unavailableReason']}.",
+                    fmt, compact)
     identifier = selected["id"]
     verbose = options.get("--verbose", False)
     progress = options.get("--progress", "auto")
@@ -607,6 +639,8 @@ def main(argv):
         text = f"{PROGRAM} 1.0.0\n"
     elif identifier == "help":
         text = "usage\n"
+        if operands and operands[0] not in by_id and BREAK != "help-unknown-general":
+            return fail("help", "INVALID_COMMAND", f"Unknown command identifier {operands[0]!r}.", fmt, compact)
         if operands and operands[0] in by_id:
             target = by_id[operands[0]]
             text = target["usage"] + "\n" + "".join(f"  {item['long']}  {item['summary']}\n"

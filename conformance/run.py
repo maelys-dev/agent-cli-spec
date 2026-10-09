@@ -153,6 +153,7 @@ def envelope(report: Report, name: str, completed: subprocess.CompletedProcess, 
         before = list(arguments[:list(arguments).index("--")]) if "--" in arguments else list(arguments)
         if expect_ok and matches and "--help" in before and expected not in report.verbatim:
             expected = "help"  # section 6: the help a command line gives is named help; its failure, the command
+        expected = getattr(completed, "expected_command", None) or expected
         if not report.add(f"{name}: envelope identifies the invoked command", body["command"] == expected,
                           f"command {body['command']!r}, expected {expected!r}"):
             return None
@@ -288,7 +289,11 @@ def check_pager_in_pipe(report: Report, program: Program) -> None:
                            f"pager started: {marker.exists()}, exit {completed.returncode}")
 
 
-def check_failure(report: Report, name: str, completed: subprocess.CompletedProcess, code: str) -> None:
+def check_failure(report: Report, name: str, completed: subprocess.CompletedProcess, code: str,
+                  command: str | None = None) -> None:
+    """A failure with this code; `command` when the envelope must name another command than the line's own."""
+    if command is not None:
+        completed.expected_command = command
     if completed.returncode != 1:
         report.add(name, False, f"exit {completed.returncode}, expected 1")
         return
@@ -893,6 +898,15 @@ def check_completion_install(report: Report, program: Program, by_id: dict) -> N
             if written:
                 shutil.rmtree(home)
                 home.mkdir()
+            versioned = program.run("completion", "install", shell, "--apply", "--version", "--format", "json", env=env)
+            written = sorted(tree(home))
+            check_failure(report, f"completion install {shell}: --apply --version fails with VALIDATION_FAILED",
+                          versioned, "VALIDATION_FAILED")
+            report.add(f"completion install {shell}: --apply --version writes nothing", not written,
+                       f"wrote {written[:4]}")
+            if written:
+                shutil.rmtree(home)
+                home.mkdir()
             for name in ["no-such-member"] + optional[:1]:
                 kind = "optional in" if name in declared else "absent from"
                 refused = program.run(*base, "--apply", "--field", name, env=env)
@@ -1259,6 +1273,46 @@ def _run_kit(program: Program, report: Report) -> Report:
                   program.run("version", "--no-such-option", "--json"), "VALIDATION_FAILED")
     check_failure(report, "jsonl on a json-envelope command fails with VALIDATION_FAILED",
                   program.run("version", "--format", "jsonl"), "VALIDATION_FAILED")
+    # ---- the order of the refusals, around --help and --version (sections 6 and 8) ----
+    check_failure(report, "version with an operand fails with VALIDATION_FAILED",
+                  program.run("version", "kit-extra-operand", "--json"), "VALIDATION_FAILED")
+    check_failure(report, "--version after a command fails with VALIDATION_FAILED",
+                  program.run("help", "--version", "--json"), "VALIDATION_FAILED")
+    check_failure(report, "help of an unknown identifier fails with INVALID_COMMAND",
+                  program.run("help", "kit-no-such-command", "--json"), "INVALID_COMMAND")
+    check_failure(report, "an option the command does not have fails before --help and names the command",
+                  program.run("version", "--kit-no-such-option", "--help", "--json"), "VALIDATION_FAILED")
+    incomplete = program.run("completion", "--help", "--format", "json", "--non-interactive")
+    incomplete_body = envelope(report, "completion --help envelope", incomplete, expect_ok=True)
+    if incomplete_body is not None:
+        report.add("--help gives the help of a command whose line lacks a required operand",
+                   incomplete_body["data"].get("commands") == ["completion"],
+                   f"commands {str(incomplete_body['data'].get('commands'))[:120]}")
+    check_failure(report, "under --help, jsonl without --field is refused as it is for help",
+                  program.run("version", "--help", "--format", "jsonl"), "VALIDATION_FAILED", command="help")
+    member = program.run("version", "--help", "--format", "jsonl", "--field", "commands")
+    report.add("under --help, --field commands renders the identifier",
+               member.returncode == 0 and member.stdout == '"version"\n' and member.stderr == "",
+               f"exit {member.returncode}, stdout {member.stdout[:60]!r}, stderr {member.stderr[:80]!r}")
+    # ---- a command this build cannot run fails instead of running (section 8) ----
+    for identifier, command in by_id.items():
+        if command.get("available") is not False:
+            continue
+        name = f"{identifier}: an unavailable command fails and does not run"
+        needs = any(item.get("required") for item in command["input"]["operands"] + command["input"]["options"])
+        if command["effect"] != "read" or identifier in report.verbatim or command["outputMode"] == "protocol-stream" \
+                or needs:
+            report.skip(name, "the kit only invokes an unavailable command that reads and needs no operand")
+            continue
+        refused = program.run(*command["pattern"], "--format", "json", "--non-interactive")
+        if refused.returncode != 1:
+            report.add(name, False, f"exit {refused.returncode}, expected 1")
+            continue
+        refused_body = envelope(report, name, refused, expect_ok=False)
+        if refused_body is not None:
+            code = refused_body["error"]["code"]
+            report.add(name, code not in ("VALIDATION_FAILED", "INVALID_COMMAND", "UNEXPECTED"),
+                       f"code {code}: the line is valid and the command exists, the build cannot run it")
     for long, argument in GLOBAL_OPTIONS.items():
         words = [long, argument["choices"][0] if argument.get("choices") else "x"] if argument else [long]
         check_failure(report, f"duplicate {long} fails with VALIDATION_FAILED",
@@ -1393,7 +1447,10 @@ def main(argv: list[str]) -> int:
                                         "an example beyond its declared grammar: what the command checks itself, "
                                         "the words after a delegate's or a passthrough pattern, a value of a kind "
                                         "whose grammar the contract leaves open, and whether `help` shows it",
-                                        "`--help` after a command that may write, except `completion install`"]}}
+                                        "`--help` and `--version` after a command that may write, except "
+                                        "`completion install`",
+                                        "the order of the refusals beyond the lines above, and an unavailable "
+                                        "command that may write, takes an operand or owns its stdout"]}}
     if report_path:
         try:
             report_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
