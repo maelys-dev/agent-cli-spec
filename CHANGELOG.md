@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- **The reference program is held to generated command lines.** Two contract
+  violations were found in the fixture by accident (2.9.0: it wrote before it
+  refused `--field`; 2.11.0: it ran a command under `--help`). A test now
+  builds about a thousand lines from the fixture's own catalog, the plain
+  line of each command, each rule broken once and random mixtures, runs each
+  in a home of its own, and holds the fixture to what the contract says of
+  every one: exit code, envelope, an empty stdout on failure, nothing written
+  without `--apply`, on a failure or under `--help`, and a refusal of
+  whatever the catalog refuses. The judge is the kit's own reading of an
+  example, turned around. It is a test of this repository, not a part of the
+  kit: it runs `--apply`, and lines a product may not survive.
+- It found two more gaps in the fixture, recorded in the test with their
+  reason until a release closes them: the fixture does not check the number
+  of operands (`version extra`, `note write` without its file), and it
+  ignores `--version` after a command instead of refusing it, so that
+  `completion install bash --apply --version` installs the completion.
+- **The kit read `--flag=false` as the flag given.** Found by the same lines:
+  an example carrying `--strict=false` was held to what `--strict` requires,
+  conflicts with or is grouped with. Section 2 says `--flag=false` is
+  accepted, and a flag set to false is a flag not given; the kit now reads it
+  so. No correct catalog changes verdict; one whose example spelled a flag
+  false could have failed wrongly.
+
 ## 2.13.1 — 2026-10-09
 
 - **A hidden command asked by its identifier is the one `commands` names.**

@@ -200,6 +200,7 @@ class KitRegressionTest(unittest.TestCase):
         base = ["image", "push", "a", "--to", "/srv"]
         accepted = (base, base + ["3", "4"], base + ["--tag", "v1", "--tag=v2"], base + ["--format", "json"],
                     base + ["--apply", "--report", "out.txt"], base + ["--left", "--right"], base + ["--apply=false"],
+                    base + ["--left=false"], base + ["--one", "--other=false"], base + ["--quiet=false", "3"],
                     base + ["--sum", "sha256:" + "0" * 64], ["image", "push", "--to", "/srv", "--", "a", "7"])
         for words in accepted:
             self.assertEqual(example_issues(command, trunk, words), [], words)

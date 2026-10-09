@@ -368,8 +368,10 @@ def example_issues(command: dict, global_options: list[dict], words: list[str]) 
             continue
         if option.get("hidden") is True:
             issues.append(f"{name} is hidden")
-        given[name] = given.get(name, 0) + 1
         argument = option.get("argument")
+        if not argument and equals and value == "false":
+            continue  # section 2: `--flag=false` is accepted, and a flag set to false is a flag not given
+        given[name] = given.get(name, 0) + 1
         if argument:
             if not equals:
                 if index >= len(rest):
