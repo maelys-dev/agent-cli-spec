@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **A hidden command asked by its identifier is the one `commands` names.**
+  Section 6 said of the data of `help` that "a hidden command is never among
+  them", in the paragraph that also says `commands` holds the one command
+  asked for `help COMMAND_ID`: for `help` of a hidden command the two
+  sentences contradicted each other. The first was meant for the general
+  help and now says so. A hidden command is listed by `describe` and never
+  offered (section 2); answering who names it is not offering it, and an
+  empty list would lose the identifier in the one case where the general help
+  does not give it. Reported by maelys-cli. Its two implementations and this
+  repository's fixture already answer so. No requirement, no schema and no
+  kit check changes: a program conformant to 2.13.0 is conformant to this
+  version.
+- A test holds the fixture to that answer.
+
 ## 2.13.0 — 2026-10-09
 
 - **In the data of `help`, `commands` names the commands the text shows**

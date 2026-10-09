@@ -230,6 +230,11 @@ class KitRegressionTest(unittest.TestCase):
             self.assertIn("completion install SHELL", asked.stdout)
             self.assertEqual(list(home.iterdir()), [])
         self.assertIn("conformant note write notes/today.txt --apply", program.run("help", "note.write").stdout)
+        # the general help never lists a hidden command; asked by its identifier, it is the one named
+        general = json.loads(program.run("help", "--json").stdout)["data"]["commands"]
+        self.assertNotIn("complete.candidates", general)
+        for words in (("help", "complete.candidates"), ("__complete", "--help")):
+            self.assertEqual(json.loads(program.run(*words, "--json").stdout)["data"]["commands"], ["complete.candidates"])
         self.assertNotIn("1.0.0", program.run("version", "--help").stdout)
 
     def test_fixture_refuses_a_field_before_it_writes(self):
