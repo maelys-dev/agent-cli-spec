@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 # usage: scripts/package-release.sh TARGET   (linux-x86_64 | linux-arm64 | macos-arm64)
 # Runs the tests, then leaves agent-cli-spec-VERSION-TARGET.tar.gz with its
-# .sha256 in dist/: the specification, the schemas and the conformance kit.
+# .sha256 in dist/: the specification, the schemas, the conformance kit and
+# the generated command lines of tests/invocations.py.
 # The content does not depend on the target; the socle builds one archive
 # per target and the name keeps them apart.
 set -eu
@@ -17,6 +18,9 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 stage="$work/agent-cli-spec-$version"
 mkdir -p "$stage"
 cp -R spec schemas conformance examples VERSION CHANGELOG.md LICENSE LICENSE-SPEC README.md "$stage/"
+# the generated command lines the README presents; they import the kit from ../conformance
+mkdir -p "$stage/tests"
+cp tests/invocations.py "$stage/tests/"
 rm -rf "$stage/conformance/__pycache__"
 mkdir -p dist
 name="agent-cli-spec-$version-$target.tar.gz"
