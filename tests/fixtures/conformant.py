@@ -94,7 +94,7 @@ CATALOG.append(command(
     [{"name": "TARGET", "required": True, "variadic": False, "summary": "Target.", "type": "choice",
       "choices": ["near", "far"]},
      {"name": "REF", "required": False, "variadic": False, "summary": "A digest of either width.",
-      "type": "digest", "algorithms": ["sha256", "sha1"], "digits": [40, 64]},
+      "type": "digest", "algorithms": ["sha256", "sha1"]},
      {"name": "LABEL", "required": False, "variadic": False, "summary": "A matched label.",
       "type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
      {"name": "SUM", "required": False, "variadic": False, "summary": "A fixed-width hex sum.",
@@ -106,7 +106,7 @@ CATALOG.append(command(
      option("--paired-a", "First of the pair.", group="pair"),
      option("--paired-b", "Second of the pair.", group="pair"),
      option("--digest", "A digest of either width.",
-            {"name": "DIGEST", "type": "digest", "algorithms": ["sha256", "sha1"], "digits": [40, 64]}),
+            {"name": "DIGEST", "type": "digest", "algorithms": ["sha256", "sha1"]}),
      option("--sum", "A fixed-width hex sum.", {"name": "SUM", "type": "hex", "digits": 64}),
      option("--budget", "A size.", {"name": "SIZE", "type": "size"}, "1M"),
      option("--wait", "A duration.", {"name": "WAIT", "type": "duration"}, "5s"),
@@ -120,7 +120,7 @@ CATALOG.append(command(
      {"kind": "all-or-none", "options": ["--paired-a", "--paired-b"]},
      {"kind": "exactly-one", "options": ["--digest", "--sum"], "x-note": "one width or the other"},
      {"kind": "requires", "options": ["--report", "--strict"]}],
-    passthrough=True))
+))
 CATALOG.append(command("serve", ["serve"], "serve", "Hand stdio to a protocol.", "stream",
                        mode="protocol-stream", protocol="mcp-json-rpc"))
 CATALOG.append(command("tool", ["tool"], "tool -- ARGS...", "Delegate to a child.", "execute",
@@ -138,7 +138,7 @@ CATALOG.append(command("completion.install", ["completion", "install"], "complet
                          "choices": ["bash", "zsh", "fish"]}],
                        [option("--apply", "Write the script and the startup block."),
                         option("--expect", "Apply only the plan that carries this fingerprint.",
-                               {"name": "FINGERPRINT", "type": "digest", "algorithms": ["sha256"], "digits": 64},
+                               {"name": "FINGERPRINT", "type": "digest", "algorithms": ["sha256"]},
                                requires=["--apply"])],
                        [{"kind": "requires", "options": ["--expect", "--apply"]}]))
 CATALOG[-1]["outputSchema"] = {"type": "object",
@@ -274,25 +274,40 @@ NO_FALLBACK = {"bash": "", "zsh": "    compadd -a candidates\n", "fish": "    pr
 STATIC = {
     "bash": r"""# bash completion for @PROG@@STAMP@
 _@FN@_complete() {
-    local IFS=' ' cur="${COMP_WORDS[COMP_CWORD]}" count=$((COMP_CWORD - 1)) n kind pat longs word found=""
+    local IFS=' ' cur="${COMP_WORDS[COMP_CWORD]}" count=$((COMP_CWORD - 1)) n kind pat longs first word found=""
+    local prev="" option choices valued="" values="" size=0
     local -a given words
     given=("${COMP_WORDS[@]:1:count}")
     words=("${COMP_WORDS[@]:1:COMP_CWORD}")
     COMPREPLY=()
-    while IFS='|' read -r n kind pat longs; do
+    while IFS='|' read -r n kind pat longs first; do
         [ "$count" -ge "$n" ] || continue
         [ "${given[*]:0:n}" = "$pat" ] || continue
         found=$kind
+        size=$n
         break
     done <<'CATALOG'
 @ROWS@
 CATALOG
+    [ "$count" -gt 0 ] && prev="${given[count-1]}"
+    while IFS='|' read -r option choices; do
+        [ "$option" = "$prev" ] && valued=1 && values=$choices
+    done <<'VALUES'
+@VALUES@
+VALUES
     case "$found" in
         options)
-            for word in $longs; do
-                case "$word" in -*) case " ${given[*]} " in *" $word "*) continue ;; esac ;; esac
-                case "$word" in "$cur"*) COMPREPLY[${#COMPREPLY[@]}]=$word ;; esac
-            done ;;
+            if [ -n "$valued" ]; then
+                for word in $values; do
+                    case "$word" in "$cur"*) COMPREPLY[${#COMPREPLY[@]}]=$word ;; esac
+                done
+            else
+                [ "$count" -eq "$size" ] && longs="$longs $first"
+                for word in $longs; do
+                    case "$word" in -*) case " ${given[*]} " in *" $word "*) continue ;; esac ;; esac
+                    case "$word" in "$cur"*) COMPREPLY[${#COMPREPLY[@]}]=$word ;; esac
+                done
+            fi ;;
         none) ;;
         delegate)
             IFS=$'\n'
@@ -314,7 +329,7 @@ complete -o filenames -F _@FN@_complete @PROG@
     "zsh": r"""#compdef @PROG@
 # zsh completion for @PROG@@STAMP@: source it after compinit
 _@FN@() {
-    local cur=${words[CURRENT]} row n kind pat longs word found=
+    local cur=${words[CURRENT]} row n kind pat longs first word found= entry valued= values= size=0
     local -a given candidates parts
     given=("${(@)words[2,CURRENT-1]}")
     for row in @ROWS@; do
@@ -324,14 +339,26 @@ _@FN@() {
         [[ "${(j: :)given[1,n]}" == "$parts[3]" ]] || continue
         found=$parts[2]
         longs=$parts[4]
+        first=$parts[5]
+        size=$n
         break
+    done
+    for entry in @VALUES@; do
+        if (( ${#given} )) && [[ ${entry%%|*} == "${given[-1]}" ]]; then valued=1; values=${entry#*|}; fi
     done
     case $found in
         options)
-            for word in ${=longs}; do
-                [[ $word == -* ]] && (( ${given[(Ie)$word]} )) && continue
-                [[ $word == "$cur"* ]] && candidates+=($word)
-            done ;;
+            if [[ -n $valued ]]; then
+                for word in ${=values}; do
+                    [[ $word == "$cur"* ]] && candidates+=($word)
+                done
+            else
+                (( ${#given} == size )) && longs="$longs $first"
+                for word in ${=longs}; do
+                    [[ $word == -* ]] && (( ${given[(Ie)$word]} )) && continue
+                    [[ $word == "$cur"* ]] && candidates+=($word)
+                done
+            fi ;;
         none) ;;
         delegate)
             candidates=("${(@f)$(@PROG@ __complete -- "${(@)words[2,CURRENT]}" 2>/dev/null)}")
@@ -354,6 +381,10 @@ function __@FN@_complete
     set -l given $tokens[2..-1]
     set -l found ""
     set -l longs
+    set -l first
+    set -l size 0
+    set -l valued ""
+    set -l values
     set -l out
     for row in @ROWS@
         set -l parts (string split -- '|' $row)
@@ -361,15 +392,34 @@ function __@FN@_complete
         test (string join -- ' ' $given[1..$parts[1]]) = "$parts[3]"; or continue
         set found $parts[2]
         set longs (string split -- ' ' $parts[4])
+        set first (string split -- ' ' $parts[5])
+        set size $parts[1]
         break
+    end
+    if test (count $given) -gt 0
+        for entry in @VALUES@
+            set -l pair (string split -m 1 -- '|' $entry)
+            if test "$pair[1]" = "$given[-1]"
+                set valued 1
+                set values (string split -- ' ' $pair[2])
+            end
+        end
     end
     switch "$found"
         case options
-            for word in $longs
-                if string match -q -- '-*' $word; and contains -- $word $given
-                    continue
+            if test -n "$valued"
+                for word in $values
+                    test -n "$word"; and string match -q -- "$cur*" $word; and set -a out $word
                 end
-                string match -q -- "$cur*" $word; and set -a out $word
+            else
+                test (count $given) -eq $size; and set -a longs $first
+                for word in $longs
+                    test -n "$word"; or continue
+                    if string match -q -- '-*' $word; and contains -- $word $given
+                        continue
+                    end
+                    string match -q -- "$cur*" $word; and set -a out $word
+                end
             end
         case none
         case delegate
@@ -416,6 +466,14 @@ def candidate_words(item):
     return words
 
 
+# The options that take a value, with the choices of those that have some: what completion offers after one
+# of them. One spelling means one thing across this program's commands, which the assertion holds.
+VALUED = {}
+for _item in list(GLOBAL_OPTIONS) + [entry for _command in CATALOG for entry in _command["input"]["options"]]:
+    if _item.get("argument"):
+        assert VALUED.setdefault(_item["long"], _item["argument"].get("choices", [])) == _item["argument"].get("choices", [])
+
+
 def completion_script(shell):
     """The script of `completion SHELL`: it calls `__complete`, or carries the catalog's candidates."""
     function = PROGRAM.replace("-", "_")
@@ -429,18 +487,21 @@ def completion_script(shell):
     for item in CATALOG:
         kind = "delegate" if item["external"] else "options" if item["available"] else "none"
         longs = sorted(candidate_words(item))
-        rows.append(f"{len(item['pattern'])}|{kind}|{' '.join(item['pattern'])}|{' '.join(longs)}")
+        first = item["input"]["operands"][0].get("choices", []) if item["input"]["operands"] else []
+        rows.append(f"{len(item['pattern'])}|{kind}|{' '.join(item['pattern'])}|{' '.join(longs)}|{' '.join(first)}")
     # the first words of a longer command, which are no command themselves: `note` of `note write`
     patterns = [item["pattern"] for item in CATALOG]
     begun = sorted({tuple(pattern[:size]) for pattern in patterns for size in range(1, len(pattern))
                     if pattern[:size] not in patterns})
-    rows += [f"{len(words)}|options|{' '.join(words)}|{' '.join(sorted(next_words(words)))}" for words in begun]
+    rows += [f"{len(words)}|options|{' '.join(words)}|{' '.join(sorted(next_words(words)))}|" for words in begun]
     # a script takes the first row that fits: the longest pattern first, `completion install` before `completion`
     rows.sort(key=lambda row: -int(row.split("|")[0]))
     top = sorted({item["pattern"][0] for item in CATALOG if not item["hidden"] and item["available"]})
     stamp = "" if BREAK == "completion-static-no-version" else f", carrying the candidates of catalog version {VERSION}"
     text = STATIC[shell].replace("@STAMP@", stamp).replace("@TOP@", " ".join(top))
     text = text.replace("@ROWS@", "\n".join(rows) if shell == "bash" else " ".join(f"'{row}'" for row in rows))
+    values = [f"{long}|{' '.join(choices)}" for long, choices in sorted(VALUED.items())]
+    text = text.replace("@VALUES@", "\n".join(values) if shell == "bash" else " ".join(f"'{value}'" for value in values))
     return text.replace("@PROG@", PROGRAM).replace("@FN@", function)
 
 
@@ -533,6 +594,101 @@ CHILD = "import sys; print('child:', *sys.argv[1:]); sys.exit(7 if '--fail' in s
 RENDERING = ("--format", "--json", "--compact", "--pretty", "--pager", "--field")
 
 
+WIDTHS = {"sha1": 40, "sha256": 64, "sha384": 96, "sha512": 128}
+LIMIT = 2 ** 64 - 1
+MISSING = object()  # an option that takes a value, at the end of the line
+
+
+def kind_problem(declaration, value):
+    """Section 3: why a value is not of its declared kind, or None. A digit is 0 to 9 and no other."""
+    kind = declaration.get("type", "string")
+    if value is MISSING:
+        return "without its value"
+    value = str(value)
+    if value == "" and kind != "string":
+        return "an empty value"  # any text is a string, the empty one included; no other kind has an empty value
+    if BREAK == "kinds-unchecked" and kind != "choice":
+        return None
+    if declaration.get("choices") and value not in declaration["choices"]:
+        return f"not one of {', '.join(declaration['choices'])}"
+    number = None
+    if kind == "boolean" and value not in ("true", "false"):
+        return "not true or false"
+    if kind in ("integer", "unsigned"):
+        if re.fullmatch(r"[0-9]+" if kind == "unsigned" else r"-?[0-9]+", value) is None:
+            return "not a decimal integer"
+        number = int(value)
+        if not (0 if kind == "unsigned" else -2 ** 63) <= number <= (LIMIT if kind == "unsigned" else 2 ** 63 - 1):
+            return "beyond 64 bits"
+    if kind == "size":
+        match = re.fullmatch(r"([0-9]+)([KMGT]?)", value)
+        if match is None:
+            return "not digits and at most one suffix among K, M, G, T, in upper case"
+        number = int(match.group(1)) * 1024 ** " KMGT".index(match.group(2) or " ")
+        if number > LIMIT:
+            return "beyond 64 bits"
+    if kind == "duration":
+        match = re.fullmatch(r"([0-9]+)(ms|s|m|h|d)", value)
+        if match is None:
+            return "not digits and one unit among ms, s, m, h, d"
+        if int(match.group(1)) * {"ms": 1, "s": 1000, "m": 60000, "h": 3600000, "d": 86400000}[match.group(2)] > LIMIT:
+            return "beyond 64 bits of milliseconds"
+    if number is not None and not declaration.get("minimum", number) <= number <= declaration.get("maximum", number):
+        return "beyond its declared range"
+    if kind == "absolute-path" and not value.startswith("/"):
+        return "not an absolute path"
+    widths = declaration.get("digits")
+    widths = [widths] if isinstance(widths, int) else widths
+    if kind == "sha256" and re.fullmatch(r"[0-9a-f]{64}", value) is None:
+        return "not 64 lower-case hexadecimal digits"
+    if kind == "hex" and (re.fullmatch(r"[0-9a-f]+", value) is None or (widths and len(value) not in widths)):
+        return "not lower-case hexadecimal digits of the declared width"
+    if kind == "digest":
+        algorithm, _, digits = value.partition(":")
+        if algorithm not in declaration["algorithms"] or re.fullmatch(r"[0-9a-f]+", digits) is None \
+                or len(digits) != WIDTHS.get(algorithm, len(digits)):
+            return f"not a digest of {', '.join(declaration['algorithms'])}, in lower case and of its algorithm's width"
+    if kind in ("string", "path") and declaration.get("pattern") and re.search(declaration["pattern"], value) is None:
+        return f"not matching {declaration['pattern']}"
+    return None
+
+
+def whole_line_problem(command, options, operands):
+    """Section 8, step 4: what the line says as a whole. A flag set to false is a flag not given."""
+    own = {item["long"]: item for item in command["input"]["options"]}
+    given = {name for name, value in options.items() if value is not False}
+    expected = command["input"]["operands"]
+    supplied = {item["name"] for place, item in enumerate(expected) if place < len(operands)}
+    for name in sorted(given & set(own)):
+        for other in own[name]["requires"]:
+            if other not in given:
+                return f"{name} requires {other}."
+        for other in own[name]["conflictsWith"]:
+            if other in given or other in supplied:
+                return f"{name} conflicts with {other}."
+    for name, item in own.items():
+        if item["required"] and name not in given:
+            return f"{name} is required."
+    groups = {}
+    for name, item in own.items():
+        if item.get("group"):
+            groups.setdefault(item["group"], []).append(name)
+    rules = [{"kind": "all-or-none", "options": names} for names in groups.values()] + command["input"]["constraints"]
+    for rule in rules:
+        present = [name for name in rule["options"] if name in given]
+        broken = {"requires": rule["options"][:1] == present[:1] and len(present) < len(rule["options"]),
+                  "at-most-one": len(present) > 1, "exactly-one": len(present) != 1,
+                  "all-or-none": 0 < len(present) < len(rule["options"])}[rule["kind"]]
+        if broken:
+            return f"{rule['kind']} of {', '.join(rule['options'])} does not hold."
+    for place, value in enumerate(operands):
+        if expected and (place < len(expected) or expected[-1]["variadic"]):
+            problem = kind_problem(expected[min(place, len(expected) - 1)], value)
+            if problem:
+                return f"{expected[min(place, len(expected) - 1)]['name']} is {problem}."
+    return None
+
+
 def main(argv):
     delegate = next((item for item in CATALOG if item["external"] and argv[:len(item["pattern"])] == item["pattern"]), None)
     if delegate is not None and BREAK != "delegate-parses":
@@ -547,6 +703,7 @@ def main(argv):
     declarations.update({item["long"]: item for command in CATALOG for item in command["input"]["options"]})
     declarations["--version"] = option("--version", "Version.")
     duplicates = []
+    stray = []
     index = 0
     while index < len(argv):
         word = argv[index]
@@ -557,22 +714,27 @@ def main(argv):
             name, equals, value = word.partition("=")
             if declarations.get(name, {}).get("argument") and not equals:
                 index += 1
-                value = argv[index] if index < len(argv) else ""
+                value = argv[index] if index < len(argv) else MISSING
             elif not equals:
                 value = True
             if name in options:
                 duplicates.append(name)
             options[name] = value
+        elif word.startswith("-") and word != "-" and BREAK != "dash-is-an-operand":
+            stray.append(word)  # section 8: one dash and more is neither an option nor an operand
         else:
             words.append(word)
         index += 1
-    if options.get("--format") == "text":
-        fmt = "text"
-    if options.get("--json") in (True, "true") or options.get("--format") == "json":
+    # Section 8: two options that set the same thing, the last one written wins. A dict keeps the order written.
+    for name, value in options.items():
+        if name == "--format" and value in ("text", "json", "jsonl"):
+            fmt = value
+        elif name == "--json" and value in (True, "true"):
+            fmt = "json"
+        elif name in ("--compact", "--pretty") and value in (True, "true", "false"):
+            compact = (name == "--compact") == (value != "false")
+    if BREAK == "json-always-wins" and options.get("--json") in (True, "true"):
         fmt = "json"
-    if options.get("--format") == "jsonl":
-        fmt = "jsonl"
-    compact = options.get("--compact") in (True, "true") or options.get("--pretty") == "false"
     if options.get("--help") in (True, "true") and not words:
         # Section 6: --help is `help` spelled as an option; with no command on the line it selects help and is spent.
         words = ["help"]
@@ -597,22 +759,21 @@ def main(argv):
             return fail(selected["id"], "VALIDATION_FAILED", f"Option {name} is not supported by '{selected['id']}'.", fmt, compact)
     if duplicates:
         return fail(selected["id"], "VALIDATION_FAILED", f"Duplicate option {duplicates[0]}.", fmt, compact)
+    if stray:
+        return fail(selected["id"], "VALIDATION_FAILED",
+                    f"{stray[0]} is neither an option nor an operand: options are spelled --name, and an operand "
+                    "that starts with a dash goes after --.", fmt, compact)
     for name, value in options.items():
         argument = declarations[name].get("argument")
         if argument is None:
             if value is not True and value not in ("true", "false"):
                 return fail(selected["id"], "VALIDATION_FAILED", f"{name} takes true or false.", fmt, compact)
             options[name] = value is True or value == "true"
-        elif argument.get("type") == "choice" and value not in argument["choices"]:
-            return fail(selected["id"], "VALIDATION_FAILED", f"Invalid choice for {name}.", fmt, compact)
-        elif argument.get("type") == "digest":
-            algorithm, _, digits = str(value).partition(":")
-            widths = argument.get("digits")
-            widths = [widths] if isinstance(widths, int) else widths
-            if algorithm not in argument["algorithms"] or re.fullmatch(r"[0-9a-f]+", digits) is None \
-                    or (widths and len(digits) not in widths):
-                return fail(selected["id"], "VALIDATION_FAILED", f"{name} takes a digest of {argument['algorithms']}.",
-                            fmt, compact)
+        else:
+            own = next((item for item in selected["input"]["options"] if item["long"] == name), declarations[name])
+            problem = kind_problem(own.get("argument", argument), value)
+            if problem:
+                return fail(selected["id"], "VALIDATION_FAILED", f"{name} is {problem}.", fmt, compact)
 
     if selected["outputMode"] == "protocol-stream" and not selected["external"] and BREAK != "stream-renders":
         # Section 9: stdout is the protocol's; an option that would render something there is refused.
@@ -645,18 +806,10 @@ def main(argv):
     # step 4: what the line says as a whole
     if arity(selected, operands):
         return fail(selected["id"], "VALIDATION_FAILED", arity(selected, operands), fmt, compact)
-    if selected["id"] == "describe" and "--prefix" in options:
-        prefix = options["--prefix"]
-        if not options.get("--summary"):
-            return fail("describe", "VALIDATION_FAILED", "--prefix requires --summary.", fmt, compact)
-        if operands:
-            return fail("describe", "VALIDATION_FAILED", "--prefix conflicts with COMMAND_ID.", fmt, compact)
-        if not isinstance(prefix, str) or not prefix:
-            return fail("describe", "VALIDATION_FAILED", "--prefix requires PREFIX.", fmt, compact)
-        if re.fullmatch(r"[a-z]([a-z0-9.-]*[a-z0-9-])?", prefix) is None:
-            return fail("describe", "VALIDATION_FAILED", "--prefix is not a valid command prefix.", fmt, compact)
-    if selected["id"] == "completion.install" and "--expect" in options and not options.get("--apply"):
-        return fail(selected["id"], "VALIDATION_FAILED", "--expect requires --apply.", fmt, compact)
+    if not selected["input"]["passthrough"] and BREAK != "whole-line-unchecked":
+        problem = whole_line_problem(selected, options, operands)
+        if problem:
+            return fail(selected["id"], "VALIDATION_FAILED", problem, fmt, compact)
     # step 5: this build cannot run the command, so it does not, whatever its rendering would have been refused for
     if not selected["available"] and BREAK not in ("unavailable-runs", "unavailable-after-rendering"):
         return fail(selected["id"], "UNSUPPORTED", f"'{selected['id']}' is not available: {selected['unavailableReason']}.",
@@ -773,8 +926,15 @@ def main(argv):
             # Section 9: after a delegate's pattern the words are the delegate's; this one has none.
             matching = []
         elif target is not None and target["available"]:
-            matching = sorted(word for word in candidate_words(target)
-                              if word.startswith(current) and not (word.startswith("-") and word in given))
+            valued = VALUED.get(given[-1]) if BREAK != "completion-no-choices" else None
+            first = target["input"]["operands"][:1] if given == target["pattern"] else []
+            if valued is not None:
+                # the word before is an option that takes a value: its choices, or nothing the catalog can offer
+                matching = [word for word in valued if word.startswith(current)]
+            else:
+                words = candidate_words(target) | set(first[0].get("choices", []) if first and BREAK != "completion-no-choices" else [])
+                matching = sorted(word for word in words
+                                  if word.startswith(current) and not (word.startswith("-") and word in given))
         elif target is not None:
             matching = []
         else:

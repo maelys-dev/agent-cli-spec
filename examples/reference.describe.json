@@ -496,10 +496,6 @@
             "algorithms": [
               "sha256",
               "sha1"
-            ],
-            "digits": [
-              40,
-              64
             ]
           },
           {
@@ -581,10 +577,6 @@
               "algorithms": [
                 "sha256",
                 "sha1"
-              ],
-              "digits": [
-                40,
-                64
               ]
             }
           },
@@ -738,7 +730,7 @@
             ]
           }
         ],
-        "passthrough": true,
+        "passthrough": false,
         "x-form": "exhaustive"
       },
       "outputSchema": {
@@ -926,8 +918,7 @@
               "type": "digest",
               "algorithms": [
                 "sha256"
-              ],
-              "digits": 64
+              ]
             }
           }
         ],

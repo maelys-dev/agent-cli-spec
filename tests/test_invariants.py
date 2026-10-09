@@ -69,7 +69,9 @@ class GeneratedInvocationsTest(unittest.TestCase):
                                  ("version-ignored", "accepts --version after a command"),
                                  ("help-checks-arity", "help-refused"), ("help-jsonl-silent", "help-jsonl"),
                                  ("unavailable-runs", "unavailable-runs"),
-                                 ("unavailable-after-rendering", "unavailable-order")):
+                                 ("unavailable-after-rendering", "unavailable-order"),
+                                 ("kinds-unchecked", "accepts a value that is not of the declared kind"),
+                                 ("whole-line-unchecked", "accepts a broken constraint")):
             with self.subTest(defect=defect):
                 self.assertIn(expected, set(survey(FixtureProgram(defect), count=1)) - clean)
 

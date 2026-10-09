@@ -42,6 +42,63 @@ than both maelys-cli implementations.
   included, and ends with the child's status. `serve` accepted every
   rendering option and printed a line of text; it refuses them and writes
   nothing.
+- **The value kinds have a grammar** (section 3), agreed with maelys-cli on
+  what its two parsers accept. `integer`: an optional `-` then digits, no
+  `+`, within 64 bits signed. `unsigned`: digits, at most 2^64 - 1. `size`:
+  digits and at most one suffix among `K`, `M`, `G`, `T`, the powers of 1024,
+  the product within 64 bits. `duration`: digits and one unit among `ms`,
+  `s`, `m`, `h`, `d`, nothing composed. `hex` and `sha256`: lower case, of
+  the declared width, `digits` being that width or the list of the widths
+  accepted. `digest`: algorithm and digits in lower case, of the algorithm's
+  width. `boolean`: `true` or `false`. A digit is `0` to `9`: one
+  implementation read `١M` as a megabyte. An empty text is a `string` and
+  nothing else. The suffix of a `size` is in upper case only: `duration` is
+  already case-sensitive, and `m` already means minutes. **A program that
+  declares an example whose value is outside these grammars fails from this
+  version**; the kit judges values nowhere else, the generated lines do.
+- **There is no short option, and a word that starts with one dash is
+  refused** (section 8). Before `--`, such a word is neither an option nor an
+  operand: `VALIDATION_FAILED` at step 2, in the name of the command
+  resolved, `INVALID_COMMAND` when none was. `-` alone is an operand, and so
+  is anything after `--`, where a negative number goes. `note write -f`
+  created a file named `-f` in one implementation; a refusal is corrected by
+  the caller, the file is not. The kit checks `help -x`, which a program
+  that reads the word as an operand answers with `INVALID_COMMAND`. **A
+  program that takes such a word as an operand fails from this version.**
+- **Two options that set the same thing: the last one written wins**
+  (section 8). `--json` and `--format` set the format, `--compact` and
+  `--pretty` the layout of JSON. The text called `--json` an "exact alias",
+  under which `--json --format text` could be read as a duplication; both
+  maelys-cli implementations let the last one win and this repository's
+  fixture let `--json` win. A wrapper sets a format and its user adds another
+  at the end of the line. The same option written twice is still refused.
+  **A program where `--json` wins over a later `--format text`, or
+  `--compact` over a later `--pretty`, fails from this version.**
+- **`preview`, `apply` and `commit` exist in a transaction only**: the
+  `effect` of a command is `read`, `execute`, `stream` or the object of a
+  transaction. The schema allowed them alone and nothing said what such a
+  command does. **`passthrough: true` goes with `external: true` only**: a
+  command that reads its own line declares `false`. **An identifier is
+  segments separated by single dots**, `note.` and `note..write` are none,
+  and `unknown` is reserved to the envelope of a line that resolved no
+  command. No catalog read by maelys-cli or here declares any of these; **a
+  program that does fails the schema from this version.**
+- **`__complete` offers the declared choices** (section 6 always listed
+  them): of an option's value after that option, of an operand where it
+  begins. The fixture offered none; the kit checks the oracle and drives the
+  scripts there. **A program that declares choices and does not offer them
+  fails from this version.**
+- **The fixture's richest command reads its own line.** `limits` was
+  `passthrough` with fourteen typed options it never applied; it now refuses
+  what its catalog refuses. The fixture judges every value by the grammars
+  above and every line as a whole (`requires`, `conflictsWith`, groups,
+  `input.constraints`, required options) from the catalog alone, where it
+  knew two commands by hand.
+- The generated lines try every way a value can be wrong that the judge can
+  tell: a digit of another script, a number beyond 64 bits, a digest too
+  short, a suffix or a unit that is none.
+- `examples/maelys-cli.contract.json` is maelys-cli's committed contract at
+  its v0.6.5; it was the one of the 2.2.1 era.
 - Said in so many words, with no change of meaning: in a `requires` entry of
   `input.constraints` the first option requires the others, which is how the
   kit read it; `exitCodes` are the codes of the envelope, a stream command
@@ -70,8 +127,7 @@ than both maelys-cli implementations.
   carry its version as a word, fails from this version.**
 - The README said the kit never passes `--apply`, false since 2.9.0; it says
   when it does. Its example pinned `v2.0.0`. It presents
-  `tests/invocations.py`, and `examples/maelys-cli.contract.json` for what it
-  is, a catalog of the 2.2.1 era.
+  `tests/invocations.py`.
 - `RELEASING.md` writes down what a change of the contract consists of and
   what is run before a tag, and `make siblings-check` runs the kit and the
   generated lines on a built checkout of maelys-cli.
