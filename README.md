@@ -18,8 +18,10 @@ spec/extensions.md      how a product extends it without bending it
 schemas/*.json          the machine-readable form: describe document, envelope, version, records,
                         completion install
 conformance/run.py      the kit: drives a program and reports detected violations
-examples/               maelys-cli's committed contract, and reference.describe.json,
-                        one catalog carrying every member the contract allows
+examples/               reference.describe.json, one catalog carrying every member the
+                        contract allows, and maelys-cli's contract as it was at 2.2.1,
+                        kept as a second document for the schema, not as a current catalog
+tests/invocations.py    command lines generated from a catalog, for the owner of a program
 ```
 
 ## Checking a program
@@ -41,7 +43,11 @@ This returns the compact descriptors whose identifier is `content` or starts
 with `content.`. Use `describe COMMAND_ID` afterwards for one full descriptor.
 
 The kit needs `python3` and nothing else. It only runs read commands, plans
-and invocations the contract says must be refused; it never passes `--apply`.
+and invocations the contract says must be refused. It passes `--apply` in
+one case: to the reserved `completion install`, in a home it made, after it
+has read in the plan that every path lies there, and only with an option the
+program must refuse before it writes. It never runs an installation that
+would succeed, nor a product's own transaction.
 It drives the completion script in each of `bash`, `zsh` and `fish` that is
 installed, comparing what the script offers with what `__complete` returns;
 a shell that is absent is reported `SKIP`, never as a failure.
@@ -65,12 +71,28 @@ writes, protocol streams, delegates and terminal rendering.
 The fixture's own terminal behavior is exercised by the repository's tests.
 
 An implementation runs it in its own continuous integration on its own
-binaries, pinned to a tag of this repository:
+binaries, pinned to a tag of this repository (`vX.Y.Z` below is the tag it
+pins; the changelog opens with what each tag asks of a program):
 
 ```sh
-git clone https://github.com/maelys-dev/agent-cli-spec && git -C agent-cli-spec checkout v2.0.0
+git clone https://github.com/maelys-dev/agent-cli-spec && git -C agent-cli-spec checkout vX.Y.Z
 agent-cli-spec/conformance/run.py build/bin/my-program
 ```
+
+The kit asks a program a fixed set of safe questions. The owner of a program
+can ask it many more: `tests/invocations.py` builds command lines from the
+program's own catalog, each rule kept and each rule broken once, runs every
+one in a directory and a home made for it, and reports what the program does
+that the contract forbids.
+
+```sh
+agent-cli-spec/tests/invocations.py build/bin/my-program           # plans only
+agent-cli-spec/tests/invocations.py --apply build/bin/my-program   # and lines carrying --apply
+```
+
+It never runs a delegate, a `passthrough` command or a stream command. With
+`--apply` the program is trusted to write only where it is told: use it on a
+program whose writes you know.
 
 ## Reading the contract
 
