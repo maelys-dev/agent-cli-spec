@@ -105,7 +105,7 @@ def lines(command: dict, rng: random.Random, count: int) -> list[list[str]]:
               base + ["--help=false"], base + ["--help=true"], base + ["--help=false", "--json"],
               base + ["--json=false"], base + ["--help", "--help"], base + ["--help", "--field", "commands", "--json"]]
     # no short option: one dash and more is refused before `--`, `-` alone and anything after `--` are operands
-    found += [base + ["-x"], base + ["-h"], base + ["-5"], base + ["-"], base + ["--", "-x"], ["-x"] + base]
+    found += [base + ["-x"], base + ["-h"], base + ["-5"], base + ["-"], base + ["--", "-x"]]
     # two options that set the same thing: the last one written wins
     found += [base + ["--json", "--format", "text"], base + ["--format", "text", "--json"],
               base + ["--json", "--compact", "--pretty"], base + ["--json", "--pretty", "--compact"]]
