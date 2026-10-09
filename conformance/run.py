@@ -717,6 +717,9 @@ def check_completion_scripts(report: Report, program: Program, catalog: dict, co
     cases = [[""]] + [[*item["pattern"], ""] for item in plain[:6]] + [["help", ""], ["describe", ""]]
     if plain:
         cases += [[plain[0]["pattern"][0][:2]], [*plain[0]["pattern"], "zz-kit-"]]
+    # the first words of a command of several words, where a script must offer the next one
+    longer = [item["pattern"] for item in plain if len(item["pattern"]) > 1][:3]
+    cases += [[*pattern[:-1], ""] for pattern in longer] + [[*pattern[:-1], pattern[-1][:1]] for pattern in longer]
     cases = [words for index, words in enumerate(cases) if words not in cases[:index]]
     oracle = []
     for words in cases:
@@ -1433,6 +1436,20 @@ def _run_kit(program: Program, report: Report) -> Report:
         words = {record.get("word") for record in body["data"].get("records", [])}
         visible = {command["pattern"][0] for command in commands if not command["hidden"] and command["available"]}
         report.add("__complete offers the visible command words", visible <= words, f"missing {visible - words}")
+        # section 6, "command words": after the first words of a command of several, the next one
+        begun: dict[tuple, set] = {}
+        for command in commands:
+            if not command["hidden"] and command["available"]:
+                for size in range(1, len(command["pattern"])):
+                    begun.setdefault(tuple(command["pattern"][:size]), set()).add(command["pattern"][size])
+        for given, following in sorted(begun.items())[:4]:
+            deeper = program.run("__complete", "--format", "json", "--non-interactive", "--", *given, "")
+            try:
+                offered = {record["word"] for record in parse_json(deeper.stdout)["data"]["records"]}
+            except (ValueError, KeyError, TypeError):
+                offered = set()
+            report.add(f"__complete after {' '.join(given)} offers the next word of its commands", following <= offered,
+                       f"missing {sorted(following - offered)}, offered {sorted(offered)[:8]}")
         excluded = {command["pattern"][0] for command in commands if command["hidden"] or not command["available"]} - visible
         report.add("__complete omits hidden and unavailable command words", not excluded & words,
                    f"unexpected {excluded & words}")

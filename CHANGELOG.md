@@ -16,8 +16,39 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 
 ## Unreleased
 
-Follow-up of an independent review: the kit's own weaknesses, and what the
-repository says of itself. No requirement changes.
+Follow-up of an independent review: the kit's own weaknesses, what the
+repository says of itself, and places where the reference fixture did less
+than both maelys-cli implementations.
+
+- **`__complete` offers the next word of a command of several words**
+  (section 6): `write` and `commit` after `note`. The text said "command
+  words" and the fixture offered the first word of every command again, so
+  that `note <Tab>` proposed `note note`. The sentence now says which words;
+  the fixture's oracle and its three static scripts follow, choosing the
+  longest pattern the words begin with (`completion install` before
+  `completion`). The kit checks the oracle on such words and drives the
+  scripts on them. **A program whose `__complete` does not offer the next
+  word of its multi-word commands fails from this version.**
+- **The rendering options are named** (section 9): `--format`, `--json`,
+  `--compact`, `--pretty`, `--pager` and `--field`, the ones that choose or
+  shape what a command writes on stdout. The term was used six times and
+  never defined, so that nobody could tell whether a stream command refuses
+  `--color`. It does not, nor `--verbose`, `--progress` and
+  `--non-interactive`. A delegate refuses nothing, which the same sentence
+  used to deny.
+- **The fixture's delegate delegates and its stream command keeps its
+  stdout.** `tool` parsed its line and answered with an envelope; it now
+  hands every word after its pattern to a child, `--help` and `--json`
+  included, and ends with the child's status. `serve` accepted every
+  rendering option and printed a line of text; it refuses them and writes
+  nothing.
+- Said in so many words, with no change of meaning: in a `requires` entry of
+  `input.constraints` the first option requires the others, which is how the
+  kit read it; `exitCodes` are the codes of the envelope, a stream command
+  and a delegate carrying the member while their process ends as the
+  underlying one does; an envelope names `help` when the line asked for a
+  help and got it (section 7 said only "the resolved command"); `commands`
+  holds the descriptors of a prefix too.
 
 - **One wrong descriptor no longer ends the report.** A catalog with one
   stray member got a report of two lines, and its author learned of the next

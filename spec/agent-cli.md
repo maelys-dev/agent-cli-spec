@@ -41,7 +41,7 @@ PROGRAM describe COMMAND_ID --format json       # one descriptor
 | `contract` | `agent-cli/v2` |
 | `cliApi` | `1`, the dispatcher API the program accepts |
 | `framework` | the implementation and its version, free text |
-| `commands` | the descriptors: all of them, or the one asked |
+| `commands` | the descriptors: all of them, the one asked, or those of a prefix |
 | `globalOptions`, `invariants`, `output` | the catalog form only |
 | `filter` | the filtered-summary selection, present only with `--summary --prefix PREFIX` |
 
@@ -94,7 +94,7 @@ an invocation from `input`, never from help text.
 | `input` | `synopsis`, `operands`, `options`, `constraints`, `passthrough` |
 | `examples` | invocations the command accepts, each `{"words": [...], "summary": ...}`; optional |
 | `outputSchema` | a JSON Schema of `data` on success |
-| `exitCodes` | exactly `{"0": "command completed", "1": "execution failed", "2": "valid report with violations"}` |
+| `exitCodes` | exactly `{"0": "command completed", "1": "execution failed", "2": "valid report with violations"}`: the codes of the envelope. A stream command and a delegate carry the member like any descriptor; the status of their process is the underlying one's (section 8) |
 
 A descriptor MAY carry members whose name starts with `x-`, as may every
 other object of a `describe` document (`spec/extensions.md`); a generic agent
@@ -140,7 +140,9 @@ committed by products do not change.
 `input.constraints` states the cross-option rules as entries `{"kind":
 ..., "options": [...]}` with `kind` among `requires`, `at-most-one`,
 `exactly-one`, `all-or-none`. An entry's `options` is the whole rule, so two
-all-or-none groups are two entries and no entry needs a name.
+all-or-none groups are two entries and no entry needs a name. In a `requires`
+entry the first option requires the others; in the three other kinds the
+order says nothing.
 
 An entry MAY restate a rule the options already carry through `requires` or
 `conflictsWith`, or state one they cannot: `exactly-one` has no form at the
@@ -431,8 +433,10 @@ installs it regenerates it when the program changes; how staleness is
 detected is the implementation's business, not this contract's. After the
 pattern of a delegate, whose words the catalog does not hold (section 9),
 such a script calls `__complete`. Candidates come from the catalog: command
-words, options not yet given with hidden options excluded, choices; command
-identifiers after `help` and `describe`. A hidden or an unavailable command
+words, that is the first word of each command and, after the first words of
+a command of several, its next word (`write` after `note`); options not yet
+given with hidden options excluded; choices; command identifiers after
+`help` and `describe`. A hidden or an unavailable command
 is never offered, as a word or as an identifier: `describe` still answers
 for it, completion does not propose it. Whether options are offered before a
 `-` is typed is the implementation's choice, and a script follows its own
@@ -474,7 +478,8 @@ Failure, on stderr only, stdout empty:
            "hint": "Next safe action."}}
 ```
 
-`command` is the identifier of the resolved command, or `unknown` when
+`command` is the identifier of the resolved command, `help` when the line
+asked for the help of a command and got it (section 6), or `unknown` when
 resolution failed. `error.message` states the first causal failure in plain
 language; `error.hint` gives the next safe action and SHOULD be present;
 `error.issues` MAY list `{"code", "path", "message"}` entries for schema
@@ -502,8 +507,7 @@ empty string both render as an empty field).
 
 Text rendering of a failure is `PROGRAM: [CODE] message` on stderr, followed
 by `Hint: ...` when present, colored on a terminal unless `--color never`,
-`NO_COLOR` or `TERM=dumb` applies. Nothing else is ever written to a
-protocol stream's stdout.
+`NO_COLOR` or `TERM=dumb` applies.
 
 The format selects the rendering, never the stream. In text mode as in JSON,
 the rendering of a success goes to stdout and the rendering of a failure to
@@ -573,12 +577,20 @@ listed code for another meaning.
 ## 9. Protocol streams and delegates
 
 `stream` commands and delegates (`external: true`) are the only exceptions
-to the envelope. They refuse rendering options, keep diagnostics on stderr,
-never inject banners, progress or JSON into their stdout, and declare
-`outputMode: "protocol-stream"`. A command implementing a named protocol
-identifies it through `protocol`; a command merely relaying a child's stdio
-declares none, as section 2 says. A delegate receives every argument after its pattern
-verbatim, including `--help`, and owns its exit code.
+to the envelope. They keep diagnostics on stderr, never inject banners,
+progress or JSON into their stdout, where nothing is written but the
+protocol or the child's output, and declare `outputMode:
+"protocol-stream"`. A command implementing a named protocol identifies it
+through `protocol`; a command merely relaying a child's stdio declares none,
+as section 2 says.
+
+A stream command refuses the rendering options, the ones that choose or
+shape what a command writes on stdout: `--format`, `--json`, `--compact`,
+`--pretty`, `--pager` and `--field`. Its failures are envelopes on stderr
+like any other, and the environment's default format is how an agent has
+them in JSON (section 5). A delegate refuses nothing: it receives every
+argument after its pattern verbatim, including `--help`, and owns its exit
+code.
 
 What makes a delegate is not that the command starts another program, but
 that the catalog does not own what follows the pattern: the words, the help

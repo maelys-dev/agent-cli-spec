@@ -298,9 +298,11 @@ CATALOG
             IFS=$'\n'
             COMPREPLY=($(@PROG@ __complete -- "${words[@]}" 2>/dev/null)) ;;
         *)
-            for word in @TOP@; do
-                case "$word" in "$cur"*) COMPREPLY[${#COMPREPLY[@]}]=$word ;; esac
-            done ;;
+            if [ "$count" -eq 0 ]; then
+                for word in @TOP@; do
+                    case "$word" in "$cur"*) COMPREPLY[${#COMPREPLY[@]}]=$word ;; esac
+                done
+            fi ;;
     esac
     if [ ${#COMPREPLY[@]} -eq 0 ]; then
         IFS=$'\n'
@@ -335,9 +337,11 @@ _@FN@() {
             candidates=("${(@f)$(@PROG@ __complete -- "${(@)words[2,CURRENT]}" 2>/dev/null)}")
             [[ -n ${candidates[1]} ]] || candidates=() ;;
         *)
-            for word in @TOP@; do
-                [[ $word == "$cur"* ]] && candidates+=($word)
-            done ;;
+            if (( ${#given} == 0 )); then
+                for word in @TOP@; do
+                    [[ $word == "$cur"* ]] && candidates+=($word)
+                done
+            fi ;;
     esac
     if (( ${#candidates} )); then compadd -a candidates; else _files; fi
 }
@@ -371,8 +375,10 @@ function __@FN@_complete
         case delegate
             set out (@PROG@ __complete -- $given "$cur" 2>/dev/null)
         case '*'
-            for word in @TOP@
-                string match -q -- "$cur*" $word; and set -a out $word
+            if test (count $given) -eq 0
+                for word in @TOP@
+                    string match -q -- "$cur*" $word; and set -a out $word
+                end
             end
     end
     if test (count $out) -gt 0
@@ -386,11 +392,24 @@ complete -c @PROG@ -f -a '(__@FN@_complete)'
 }
 
 
+def next_words(given):
+    """The command words that may follow these: the next word of every command a human can be shown whose
+    pattern starts with them and goes on (section 6, "command words")."""
+    if BREAK == "completion-first-word-only":
+        return {entry["pattern"][0] for entry in CATALOG if not entry["hidden"] and entry["available"]}
+    return {entry["pattern"][len(given)] for entry in CATALOG
+            if not entry["hidden"] and entry["available"] and len(entry["pattern"]) > len(given)
+            and entry["pattern"][:len(given)] == list(given)}
+
+
 def candidate_words(item):
-    """What `__complete` offers after a command's pattern: its visible options, the global ones, and after
-    `help` and `describe` the identifiers of the commands a human can be shown (section 6)."""
+    """What `__complete` offers after a command's pattern: its visible options, the global ones, the next word
+    of a longer command, and after `help` and `describe` the identifiers of the commands a human can be shown
+    (section 6)."""
     words = {entry["long"] for entry in item["input"]["options"] if offered(entry)}
     words |= {entry["long"] for entry in GLOBAL_OPTIONS}
+    if BREAK != "completion-first-word-only":
+        words |= next_words(item["pattern"])
     if item["id"] in ("help", "describe"):
         words |= {entry["id"] for entry in CATALOG
                   if not entry["hidden"] and (entry["available"] or BREAK == "identifier-unavailable")}
@@ -411,6 +430,13 @@ def completion_script(shell):
         kind = "delegate" if item["external"] else "options" if item["available"] else "none"
         longs = sorted(candidate_words(item))
         rows.append(f"{len(item['pattern'])}|{kind}|{' '.join(item['pattern'])}|{' '.join(longs)}")
+    # the first words of a longer command, which are no command themselves: `note` of `note write`
+    patterns = [item["pattern"] for item in CATALOG]
+    begun = sorted({tuple(pattern[:size]) for pattern in patterns for size in range(1, len(pattern))
+                    if pattern[:size] not in patterns})
+    rows += [f"{len(words)}|options|{' '.join(words)}|{' '.join(sorted(next_words(words)))}" for words in begun]
+    # a script takes the first row that fits: the longest pattern first, `completion install` before `completion`
+    rows.sort(key=lambda row: -int(row.split("|")[0]))
     top = sorted({item["pattern"][0] for item in CATALOG if not item["hidden"] and item["available"]})
     stamp = "" if BREAK == "completion-static-no-version" else f", carrying the candidates of catalog version {VERSION}"
     text = STATIC[shell].replace("@STAMP@", stamp).replace("@TOP@", " ".join(top))
@@ -501,7 +527,19 @@ def field_text(value):
     return cell(value) + "\n"
 
 
+# What the delegate hands over to: another executable, which says what it received and ends as it is told.
+CHILD = "import sys; print('child:', *sys.argv[1:]); sys.exit(7 if '--fail' in sys.argv else 0)"
+# The options that choose or shape what a command writes on stdout; a stream command refuses them (section 9).
+RENDERING = ("--format", "--json", "--compact", "--pretty", "--pager", "--field")
+
+
 def main(argv):
+    delegate = next((item for item in CATALOG if item["external"] and argv[:len(item["pattern"])] == item["pattern"]), None)
+    if delegate is not None and BREAK != "delegate-parses":
+        # Section 9: what follows a delegate's pattern is another executable's command line. It is handed over
+        # verbatim, --help and --json included, and the exit status is the child's.
+        return subprocess.run([sys.executable, "-c", CHILD, *argv[len(delegate["pattern"]):]], text=True,
+                              check=False).returncode
     fmt, compact, words, options, passthrough = "text", False, [], {}, None
     if os.environ.get("CONFORMANT_FORMAT") in ("json", "text"):
         fmt = os.environ["CONFORMANT_FORMAT"]  # section 5: an implementation may let the environment pick the default
@@ -576,6 +614,13 @@ def main(argv):
                 return fail(selected["id"], "VALIDATION_FAILED", f"{name} takes a digest of {argument['algorithms']}.",
                             fmt, compact)
 
+    if selected["outputMode"] == "protocol-stream" and not selected["external"] and BREAK != "stream-renders":
+        # Section 9: stdout is the protocol's; an option that would render something there is refused.
+        asked = [name for name in RENDERING if name in options]
+        if asked:
+            return fail(selected["id"], "VALIDATION_FAILED",
+                        f"{asked[0]} renders on stdout, which '{selected['id']}' reserves for its protocol.", fmt, compact)
+
     def arity(command, given):
         """Section 8: the number of operands, where the catalog owns the line."""
         expected = command["input"]["operands"]
@@ -633,6 +678,8 @@ def main(argv):
     if not selected["available"] and BREAK == "unavailable-after-rendering":
         return fail(selected["id"], "UNSUPPORTED", f"'{selected['id']}' is not available.", fmt, compact)
     identifier = selected["id"]
+    if selected["outputMode"] == "protocol-stream" and BREAK != "stream-renders":
+        return 0  # the stream itself: with stdin closed there is nothing to say, and stdout stays the protocol's
     verbose = options.get("--verbose", False)
     progress = options.get("--progress", "auto")
     if progress not in ("auto", "always", "never"):
@@ -719,7 +766,9 @@ def main(argv):
     elif identifier == "complete.candidates":
         current = operands[-1] if operands else ""
         given = operands[:-1]
-        target = next((item for item in CATALOG if given and given[:len(item["pattern"])] == item["pattern"]), None)
+        # the longest pattern the words begin with: `completion install` and not `completion`
+        target = max((item for item in CATALOG if given and given[:len(item["pattern"])] == item["pattern"]),
+                     key=lambda item: len(item["pattern"]), default=None)
         if target is not None and target["external"]:
             # Section 9: after a delegate's pattern the words are the delegate's; this one has none.
             matching = []
@@ -729,8 +778,8 @@ def main(argv):
         elif target is not None:
             matching = []
         else:
-            matching = sorted({item["pattern"][0] for item in CATALOG
-                               if not item["hidden"] and item["available"] and item["pattern"][0].startswith(current)})
+            # no command yet: the next word of the commands these words begin, none when they begin none
+            matching = sorted(word for word in next_words(given) if word.startswith(current))
         data = {"count": len(matching), "records": [{"word": word} for word in matching]}
         header = "WORD\n" if sys.stdout.isatty() or BREAK == "header-in-pipe" else ""
         text = header + record_text(data["records"])

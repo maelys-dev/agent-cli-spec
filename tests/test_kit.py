@@ -243,6 +243,7 @@ class KitTest(unittest.TestCase):
                                  ("install-plan-no-paths", "completion-install.json"),
                                  ("completion-tty-writes", "on a terminal writes nothing"),
                                  ("completion-stale-word", "offers the words of __complete"),
+                                 ("completion-first-word-only", "offers the next word of its commands"),
                                  ("completion-no-fallback", "falls back to file completion"),
                                  ("completion-static-no-version", "carries the catalog version")):
             with self.subTest(defect=defect):
