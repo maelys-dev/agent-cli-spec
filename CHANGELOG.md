@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.13.1 — 2026-10-09
 
 - **A hidden command asked by its identifier is the one `commands` names.**
   Section 6 said of the data of `help` that "a hidden command is never among
