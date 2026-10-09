@@ -14,7 +14,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
 
-## Unreleased
+## 2.15.0 — 2026-10-09
 
 Follow-up of an independent review: the kit's own weaknesses, what the
 repository says of itself, and places where the reference fixture did less
