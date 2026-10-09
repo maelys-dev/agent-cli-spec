@@ -39,9 +39,11 @@ implementations before it was written.
   unavailable command, or refuses its rendering or its help instead of
   naming the cause, fails from this version.**
 - A word after `--` is an operand whatever its spelling, so `--help` and
-  `--version` there ask nothing, and a flag set to false is a flag not given,
-  so `--help=false` asks no help (section 8). Both were already what the two
-  maelys-cli implementations and the fixture did.
+  `--version` there ask nothing, and `--help=false` asks no help (section 8).
+  Both were already what the two maelys-cli implementations and the fixture
+  did. What `--json=false` means where the environment selects `json` is
+  left open: maelys-cli reads it as a choice of text, the fixture as a flag
+  not given.
 - The kit checks each of these on lines that are safe to run: `version` with
   an operand, `help --version`, `help` of an unknown identifier, an unknown
   option before `--help`, `completion --help` without its operand, `version

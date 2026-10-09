@@ -139,6 +139,12 @@ def before_separator(words: list[str]) -> list[str]:
     return words[:words.index("--")] if "--" in words else words
 
 
+def open_reading(words: list[str], default: str) -> bool:
+    """A line the contract does not settle: `--json=false` where the environment selects json is a choice of
+    text for one implementation and a flag not given for another."""
+    return default == "json" and "--json=false" in before_separator(words)
+
+
 def flag(before: list[str], long: str) -> bool:
     """Whether a flag is given: `--flag` or `--flag=true`; `--flag=false` is a flag not given (section 2)."""
     return long in before or f"{long}=true" in before
@@ -313,7 +319,7 @@ def main(argv: list[str]) -> int:
                     left_out += [command["id"]] if command["id"] not in left_out else []
                     continue
                 for words in lines(command, rng, count):
-                    if flag(before_separator(words), "--apply") and not with_apply:
+                    if flag(before_separator(words), "--apply") and not with_apply or open_reading(words, default):
                         continue
                     for name in ("home", "work"):
                         shutil.rmtree(sandbox / name, ignore_errors=True)
