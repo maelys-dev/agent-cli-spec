@@ -5,6 +5,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 
 | Tag | A program fails from this tag when |
 | --- | --- |
+| 2.15.0 | it does not refuse a repeated `--field`; its static completion script does not carry its version as a word; `__complete` does not offer the next word of a multi-word command, or the declared choices; it reads a word that starts with one dash as an operand; `--json` wins over a later `--format text`, or `--compact` over a later `--pretty`; an example of its catalog has a value outside the grammars of section 3; its catalog declares `preview`, `apply` or `commit` outside a transaction, `passthrough` without `external`, an identifier with an empty segment, or the identifier `unknown` |
 | 2.14.0 | it prints nothing and exits 0 for `COMMAND --help --format jsonl`; it ignores `--version` after a command; it answers `help` of an unknown identifier with the general help; it runs an unavailable command, or refuses its rendering or its help instead of naming the cause |
 | 2.13.0 | it lists every command in `data.commands` for `help COMMAND_ID` |
 | 2.12.0 | it puts `examples` in `describe --summary`; under `--help` its envelope names the command asked about and not `help` |
@@ -13,6 +14,14 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.9.0 | it declares `completion.install` and refuses a `--field` only after it has written; it declares `--expect` on a transaction without the reserved shape |
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
+
+## Unreleased
+
+- The table above gains the row of 2.15.0, which that release went out
+  without.
+- The release archive contains `tests/invocations.py`, the generated command
+  lines its README presents: the archive had the kit and not this tool,
+  which lived in a clone of the repository only.
 
 ## 2.15.0 — 2026-10-09
 
