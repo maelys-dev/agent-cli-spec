@@ -8,14 +8,27 @@ the text forbids and no check looks at, before an implementer reports it.
 
 It is a test of this repository's reference program, not a part of the kit: it runs `--apply`, in a
 home it made, and lines a product may not survive.
+
+It can be pointed at another program, by whoever owns that program:
+
+    python3 tests/invocations.py [--lines N] [--apply] [--reference] PROGRAM [ARG...]
+
+Each line runs in a directory and a home made for it. A delegate, a `passthrough` command and a stream
+command are never run. Lines carrying `--apply` are left out unless `--apply` is given: with it the
+program is trusted to write only under the directory and the home it is given.
 """
 from __future__ import annotations
 
+import collections
 import json
+import os
 import pathlib
 import random
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "conformance"))
@@ -73,6 +86,8 @@ def lines(command: dict, rng: random.Random, count: int) -> list[list[str]]:
     found = [base, base + ["--no-such-option"], base + ["--", "kit"], base + ["kit-extra-operand"],
              base + ["--help"], base + ["--version"], base[:-1] if operands else base]
     found += [base + rendering for rendering in RENDERINGS] + [base + ["--help", "--json"]]
+    found += [base + ["--help", "--format", "jsonl"], base + ["--help", "--format", "jsonl", "--field", "commands"],
+              list(command["pattern"]) + ["--help"]]
     for place, item in enumerate(options):
         found += [base + spelled(item), base + spelled(item) + spelled(item), base + spelled(item, wrong=True),
                   base + [item["long"]], base + spelled(item) + ["--help"], base + spelled(item) + ["--version"],
@@ -136,6 +151,10 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
         return found
     if "--help" in before and written:
         found.append(f"help-writes: --help ran the command, which wrote {written[:3]} (section 6)")
+    if command.get("available") is False and "--help" not in before and code != 1:
+        found.append("unavailable-runs: a command this build cannot run did not fail (section 8)")
+    alone = [issue for issue in example_issues(command, global_options, words)
+             if kind(issue) in ALONE and issue.startswith("--") and not issue.endswith("is hidden")]
     body = None
     if json_mode:
         try:
@@ -145,7 +164,9 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
     if body is not None:
         if body.get("exitCode") != code or body.get("ok") is not (code != 1) or isinstance(body.get("exitCode"), bool):
             found.append(f"envelope: ok {body.get('ok')!r} and exitCode {body.get('exitCode')!r} for exit {code}")
-        named = "help" if asks and code != 1 else command["id"]  # section 6: the help a line gives is named help
+        # sections 6 and 8: the help a line gives is named help, and so is a refusal of its rendering; what one
+        # option says alone is refused before, in the name of the command
+        named = "help" if asks and not alone else command["id"]
         if body.get("command") != named:
             found.append(f"envelope-command: names {body.get('command')!r}, not {named!r}")
         if code == 1 and body.get("error", {}).get("code") not in CODES:
@@ -160,7 +181,16 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
             and not any(word.partition("=")[0] in own for word in before):
         found.append("success-stderr: a success writes to stderr, which only --verbose in text mode allows here")
     if asks:
-        return found  # where --help stands among the refusals of section 8 is not written yet
+        # section 8: what one option says alone is judged before --help, what the line lacks as a whole is not,
+        # and the rendering is that of help, which is not records
+        if alone and failure_code(err) != "VALIDATION_FAILED":
+            found += [f"accepts: {kind(issue)}, under --help" for issue in alone]
+        field = "--field" in before
+        if not alone and code == 1 and not field and formats[-1:] != ["jsonl"]:
+            found.append("help-refused: --help on a line that only lacks something as a whole is refused")
+        if not alone and formats[-1:] == ["jsonl"] and not field and failure_code(err) != "VALIDATION_FAILED":
+            found.append("help-jsonl: under --help, jsonl without --field is not refused as it is for help")
+        return found
     # ---- what the catalog says of the line ----
     grammar = [issue for issue in example_issues(command, global_options, words) if not issue.endswith("is hidden")]
     failed = failure_code(err) if code == 1 else None
@@ -177,6 +207,10 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
     return found
 
 
+ALONE = {"an undeclared option", "--version after a command", "a repeated option", "an option without its value",
+         "a flag with a value that is not true or false", "a value that is not of the declared kind"}
+
+
 def kind(issue: str) -> str:
     """The rule an issue of `example_issues` is about, without the words of the line."""
     for needle, rule in (("--version is not an option", "--version after a command"),
@@ -188,3 +222,69 @@ def kind(issue: str) -> str:
         if needle in issue:
             return rule
     return "a value that is not of the declared kind"
+
+
+def main(argv: list[str]) -> int:
+    """Run the generated lines against a program and print what it does that the contract forbids."""
+    count, with_apply, reference = 10, False, False
+    while argv and argv[0] in ("--lines", "--apply", "--reference"):
+        if argv[0] == "--lines":
+            count, argv = int(argv[1]), argv[2:]
+        else:
+            with_apply, reference, argv = with_apply or argv[0] == "--apply", reference or argv[0] == "--reference", argv[1:]
+    if not argv:
+        print(__doc__.split("It can be pointed", 1)[1].split("\n\n", 2)[1], file=sys.stderr)
+        return 2
+    first = shutil.which(argv[0]) or argv[0]
+    program = [os.path.abspath(first) if os.path.exists(first) else first] \
+        + [os.path.abspath(word) if os.path.exists(word) else word for word in argv[1:]]
+    kept = {key: value for key, value in os.environ.items() if key != "MAELYS_CLI_FORMAT"}
+
+    def run(words: list[str], sandbox: pathlib.Path) -> subprocess.CompletedProcess:
+        home = sandbox / "home"
+        env = {**kept, "NO_COLOR": "1", "PAGER": "", "HOME": str(home), "XDG_DATA_HOME": str(home / ".local/share"),
+               "XDG_CONFIG_HOME": str(home / ".config"), "ZDOTDIR": str(home)}
+        return subprocess.run([*program, *words], cwd=sandbox / "work", env=env, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, timeout=30, check=False)
+    found: dict[tuple[str, str], list[tuple[str, list[str]]]] = collections.OrderedDict()
+    total, left_out = 0, []
+    with tempfile.TemporaryDirectory(prefix="agent-cli-lines-") as directory:
+        sandbox = pathlib.Path(directory)
+        for name in ("home", "work"):
+            (sandbox / name).mkdir()
+        catalog = json.loads(run(["describe", "--format", "json"], sandbox).stdout)["data"]
+        rng = random.Random(2130)
+        for command in catalog["commands"]:
+            if opaque(command):
+                left_out.append(command["id"])
+                continue
+            for words in lines(command, rng, count):
+                if "--apply" in before_separator(words) and not with_apply:
+                    continue
+                for name in ("home", "work"):
+                    shutil.rmtree(sandbox / name, ignore_errors=True)
+                    (sandbox / name).mkdir()
+                try:
+                    completed = run(words, sandbox)
+                except subprocess.TimeoutExpired:
+                    found.setdefault(("timeout", "the line did not finish in 30 seconds"), []).append((command["id"], words))
+                    continue
+                written = sorted(str(path.relative_to(sandbox)) for path in sandbox.rglob("*") if path.is_file())
+                total += 1
+                for violation in violations(command, catalog["globalOptions"], words, completed, written, reference):
+                    name, detail = violation.split(": ", 1)
+                    found.setdefault((name, re.sub(r"wrote \[.*?\]", "wrote files", detail)), []).append((command["id"], words))
+    print(f"{' '.join(argv)}: {total} lines over {len(catalog['commands']) - len(left_out)} commands"
+          + (f"; not run: {', '.join(left_out)}" if left_out else "") + ("" if with_apply else "; no line with --apply"))
+    for (name, detail), where in found.items():
+        commands = sorted({identifier for identifier, _ in where})
+        print(f"{name}: {detail}")
+        print(f"    {len(where)} lines, on {', '.join(commands[:6])}{' ...' if len(commands) > 6 else ''}")
+        for identifier, words in sorted(where, key=lambda entry: len(entry[1]))[:3]:
+            print(f"    e.g. {' '.join(words)}")
+    print("nothing found" if not found else f"{len(found)} kinds of violation")
+    return 1 if found else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

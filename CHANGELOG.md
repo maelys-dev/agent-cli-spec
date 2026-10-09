@@ -2,6 +2,54 @@
 
 ## Unreleased
 
+What a line is refused for, and in what order, around `--help`, `--version`
+and a command the build cannot run. Found by an independent review and by
+the generated command lines below; measured on maelys-cli's two
+implementations before it was written.
+
+- **The order of the refusals is a numbered list** (section 8), and `--help`
+  has its place in it. What one option says alone is judged first and names
+  the command: an option the command does not have, a repeated one, a value
+  of the wrong kind. Then `--help` gives the help of the command, and what
+  the line lacks as a whole is not held against it: a required option, an
+  operand, an option another one requires. Help is asked on incomplete
+  lines. From there the line is rendered as `help` is: `--format jsonl`
+  without `--field` is refused as for `help`, in the name of `help`, and
+  `--field commands` renders the identifier. **A program that prints nothing
+  and exits 0 for `COMMAND --help --format jsonl` fails from this version**;
+  maelys-cli's two implementations did until their own correction.
+- **`--version` is `version` spelled as an option, as the first word of the
+  line and nowhere else** (section 6). After a command it is an option that
+  command does not declare, and the line fails with `VALIDATION_FAILED`. The
+  text said only "`version`, also `--version`", and this repository's fixture
+  ignored it after a command: `completion install bash --apply --version`
+  installed the completion, the twin of the `--help` defect of 2.11.0. **A
+  program that ignores `--version` after a command fails from this version.**
+- **`help` of an identifier the catalog does not have fails with
+  `INVALID_COMMAND`**, as `describe` does (section 6). The fixture answered
+  with the general help. **A program that does so fails from this version.**
+- **Invoking a command whose `available` is `false` fails and does not run**
+  (sections 2 and 8): with `UNSUPPORTED` when the function is absent from the
+  build, or with the listed code that names the cause better, the message
+  carrying the reason. `describe` and `help` still answer for it. The text
+  declared the member and the code and never joined them; the fixture ran
+  the command. **A program that runs an unavailable command fails from this
+  version.**
+- The kit checks each of these on lines that are safe to run: `version` with
+  an operand, `help --version`, `help` of an unknown identifier, an unknown
+  option before `--help`, `completion --help` without its operand, `version
+  --help --format jsonl` with and without `--field`, an unavailable command
+  that reads and needs no operand, and `completion install SHELL --apply
+  --version` in a home the kit made. Its report says what of the order it
+  does not check.
+- **The fixture has a parser for the number of operands**, which section 8
+  always listed among the refusals and the fixture never checked (`version
+  extra`, `note write` without its file), and judges a `digest` value where
+  every option value is judged. Seven defects prove the new checks
+  (`version-ignored`, `arity-unchecked`, `help-checks-arity`,
+  `help-jsonl-silent`, `unavailable-runs`, `help-unknown-general`, and the
+  digest through the generated lines).
+
 - **The reference program is held to generated command lines.** Two contract
   violations were found in the fixture by accident (2.9.0: it wrote before it
   refused `--field`; 2.11.0: it ran a command under `--help`). A test now
@@ -13,11 +61,12 @@
   whatever the catalog refuses. The judge is the kit's own reading of an
   example, turned around. It is a test of this repository, not a part of the
   kit: it runs `--apply`, and lines a product may not survive.
-- It found two more gaps in the fixture, recorded in the test with their
-  reason until a release closes them: the fixture does not check the number
-  of operands (`version extra`, `note write` without its file), and it
-  ignores `--version` after a command instead of refusing it, so that
-  `completion install bash --apply --version` installs the completion.
+- It found the two gaps of the fixture closed above, the number of operands
+  and `--version` after a command, and then a third, an option value of kind
+  `digest` that the fixture judged too late. It holds the order of the
+  refusals too. `python3 tests/invocations.py PROGRAM` points it at another
+  program, by whoever owns that program: delegates, `passthrough` and stream
+  commands are never run, and lines carrying `--apply` only on request.
 - **The kit read `--flag=false` as the flag given.** Found by the same lines:
   an example carrying `--strict=false` was held to what `--strict` requires,
   conflicts with or is grouped with. Section 2 says `--flag=false` is
