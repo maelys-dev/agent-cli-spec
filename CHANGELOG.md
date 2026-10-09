@@ -17,6 +17,21 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 
 ## Unreleased
 
+No requirement changes: a program conformant to 2.15.0 is conformant to this
+version, and the kit is the same.
+
+- **The text is put in order.** It had grown from 390 to 690 lines in five
+  weeks, mostly in sections 4 to 6, by additions to paragraphs that ended up
+  carrying a rule, its exceptions, its reason and its cross-references at
+  once. A section "Terms" now opens the document with the words it used
+  before defining them: catalog, descriptor, trunk, transaction, delegate,
+  `passthrough`, stream command, rendering options, envelope. Section 5 has
+  one subsection per subject, where they apply, the format, progress and
+  details, the pager, `--field`; sections 4, 6 and 8 have theirs. The
+  sentences are the ones of 2.15.0, moved and cut into shorter paragraphs.
+- One consolidation: that a stream command refuses the rendering options and
+  a delegate receives every option verbatim was said once per option, four
+  times in section 5; it is said once, under "Where they apply".
 - The table above gains the row of 2.15.0, which that release went out
   without.
 - The release archive contains `tests/invocations.py`, the generated command
