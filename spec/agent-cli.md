@@ -582,7 +582,11 @@ not stop there is neither an option nor an operand: the line fails at step
 `INVALID_COMMAND` when it resolved none, step 1 coming first. `-` alone is
 an operand. A negative number meant as an operand is written after `--`: a
 refusal is corrected by the caller, a file named `-f` is not, and a caller
-who writes `-v` by habit learns that options are spelled `--name`.
+who writes `-v` by habit learns that options are spelled `--name`. A command
+that takes another program's line takes it after `--` for the same reason:
+before it, a word of that line that starts with a dash is refused like any
+other (`run -- sh -c true`, not `run sh -c true`). A delegate is not
+concerned, its line being read by nobody here (section 9).
 
 Two options that set the same thing do not conflict: the last one written
 on the line wins. `--json` and `--format` set the format, `--compact` and

@@ -62,9 +62,12 @@ than both maelys-cli implementations.
   resolved, `INVALID_COMMAND` when none was. `-` alone is an operand, and so
   is anything after `--`, where a negative number goes. `note write -f`
   created a file named `-f` in one implementation; a refusal is corrected by
-  the caller, the file is not. The kit checks `help -x`, which a program
-  that reads the word as an operand answers with `INVALID_COMMAND`. **A
-  program that takes such a word as an operand fails from this version.**
+  the caller, the file is not. A command that wraps another program takes
+  that program's line after `--`: `run -- sh -c true`, where `run sh -c true`
+  is now refused for its `-c`; a delegate, whose line nobody reads here, is
+  not concerned. The kit checks `help -x`, which a program that reads the
+  word as an operand answers with `INVALID_COMMAND`. **A program that takes
+  such a word as an operand fails from this version.**
 - **Two options that set the same thing: the last one written wins**
   (section 8). `--json` and `--format` set the format, `--compact` and
   `--pretty` the layout of JSON. The text called `--json` an "exact alias",
