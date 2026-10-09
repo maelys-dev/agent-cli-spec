@@ -393,8 +393,10 @@ In the data of `help`, `commands` lists the identifiers of the commands the
 text shows: every command it lists for `help`, the one asked for `help
 COMMAND_ID` and for `--help` after a command. An agent goes from a help to
 `describe COMMAND_ID` without reading `text`, and since the envelope names
-`help`, `commands` is where the answer says which command it is about. A
-hidden command is never among them.
+`help`, `commands` is where the answer says which command it is about. The
+general help never lists a hidden command; asked by its identifier, a hidden
+command is the one `commands` names, as `describe COMMAND_ID` answers for it:
+answering who names it is not offering it.
 
 `completion SHELL` prints the script and writes nothing; in text mode the
 script alone, so that a shell loads it straight from the command (`source
