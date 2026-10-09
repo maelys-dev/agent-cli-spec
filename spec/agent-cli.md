@@ -550,8 +550,7 @@ Errors are reported in this causal order:
 
 A failure of steps 1 to 5 names the command the line resolved, or `unknown`.
 A word after `--` is an operand whatever its spelling: `--help` and
-`--version` there ask nothing. A flag set to false is a flag not given:
-`--help=false` asks no help.
+`--version` there ask nothing. `--help=false` asks no help.
 
 | Code | Boundary |
 | --- | --- |

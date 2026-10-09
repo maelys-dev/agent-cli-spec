@@ -30,6 +30,8 @@ def survey(program, count: int, defaults=("text",)) -> dict[str, list[str]]:
             rng = random.Random(2130)
             for command in catalog["commands"]:
                 for words in invocations.lines(command, rng, count):
+                    if invocations.open_reading(words, default):
+                        continue
                     shutil.rmtree(home, ignore_errors=True)
                     home.mkdir()
                     env = {"HOME": str(home), "XDG_DATA_HOME": "", "XDG_CONFIG_HOME": "", "ZDOTDIR": "",
