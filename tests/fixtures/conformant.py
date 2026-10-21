@@ -125,6 +125,7 @@ CATALOG.append(command("serve", ["serve"], "serve", "Hand stdio to a protocol.",
                        mode="protocol-stream", protocol="mcp-json-rpc"))
 CATALOG.append(command("tool", ["tool"], "tool -- ARGS...", "Delegate to a child.", "execute",
                        mode="protocol-stream", external=True, passthrough=True))
+CATALOG.append(command("stamp", ["stamp"], "stamp", "Run an action that is not a transaction.", "execute"))
 CATALOG.append(command("note.commit", ["note", "commit"], "note commit FILE [--apply]", "Record a commit.",
                        {"plan": "preview", "apply": "commit", "x-proof": "revision"},
                        [{"name": "FILE", "required": True, "variadic": False, "summary": "File.", "type": "path"}],
@@ -177,6 +178,29 @@ for item in CATALOG:
 offline = command("offline", ["offline"], "offline", "Unavailable in this build.", "read")
 offline.update(available=False, unavailableReason="fixture build has no offline backend")
 CATALOG.append(offline)
+
+# A default command (sections 1 and 8). The reference fixture declares none, so that every line reads as it
+# always did; a variant of it declares the command CONFORMANT_DEFAULT names, and refuses one it may not.
+DEFAULT = os.environ.get("CONFORMANT_DEFAULT") or None
+SECTION_6 = {"help", "version", "describe", "completion", "complete.candidates", "completion.install"}
+
+
+def default_problem(identifier):
+    """Why a command may not be the default, or None."""
+    item = next((entry for entry in CATALOG if entry["id"] == identifier), None)
+    if item is None:
+        return "names no command of the catalog"
+    if not item["available"]:
+        return "names a command this build cannot run"
+    if item["hidden"]:
+        return "names a hidden command"
+    if identifier in SECTION_6:
+        return "names a command of section 6"
+    if item["external"] or item["input"]["passthrough"]:
+        return "names a delegate"
+    if item["effect"] == "execute":
+        return "names an execute command"
+    return None
 if BREAK == "exit-codes":
     CATALOG[1]["exitCodes"] = {"0": "command completed"}
 if BREAK == "extra-member":
@@ -690,6 +714,9 @@ def whole_line_problem(command, options, operands):
 
 
 def main(argv):
+    if DEFAULT and default_problem(DEFAULT) and BREAK != "default-unchecked":
+        refusal = f"The catalog's defaultCommand {DEFAULT!r} {default_problem(DEFAULT)}; nothing is run."
+        return fail("unknown", "UNEXPECTED", refusal, "json" if "--json" in argv else "text", False)
     delegate = next((item for item in CATALOG if item["external"] and argv[:len(item["pattern"])] == item["pattern"]), None)
     if delegate is not None and BREAK != "delegate-parses":
         # Section 9: what follows a delegate's pattern is another executable's command line. It is handed over
@@ -735,6 +762,16 @@ def main(argv):
             compact = (name == "--compact") == (value != "false")
     if BREAK == "json-always-wins" and options.get("--json") in (True, "true"):
         fmt = "json"
+    implicit = bool(DEFAULT) and (not argv or (argv[0].startswith("-") and argv[0] not in ("--help", "--version")))
+    if BREAK == "default-help-general" and "--help" in options:
+        implicit = False
+    bare = []
+    if implicit:
+        # Section 8: the first word is an option, or there is none: the line is the default command's. A bare word
+        # before `--` is no operand of it, and no command either: no word further on is sought as one.
+        bare, words = words, list(next(item for item in CATALOG if item["id"] == DEFAULT)["pattern"])
+        if BREAK == "default-bare-absorbed":
+            words, bare = words + bare, []
     if options.get("--help") in (True, "true") and not words:
         # Section 6: --help is `help` spelled as an option; with no command on the line it selects help and is spent.
         words = ["help"]
@@ -759,6 +796,10 @@ def main(argv):
             return fail(selected["id"], "VALIDATION_FAILED", f"Option {name} is not supported by '{selected['id']}'.", fmt, compact)
     if duplicates:
         return fail(selected["id"], "VALIDATION_FAILED", f"Duplicate option {duplicates[0]}.", fmt, compact)
+    if bare:
+        return fail(selected["id"], "VALIDATION_FAILED",
+                    f"{bare[0]} is neither an option, the value of one, nor an operand: a line that starts with an "
+                    f"option is '{selected['id']}'s, whose operands go after --.", fmt, compact)
     if stray:
         return fail(selected["id"], "VALIDATION_FAILED",
                     f"{stray[0]} is neither an option nor an operand: options are spelled --name, and an operand "
@@ -831,8 +872,15 @@ def main(argv):
     if not selected["available"] and BREAK == "unavailable-after-rendering":
         return fail(selected["id"], "UNSUPPORTED", f"'{selected['id']}' is not available.", fmt, compact)
     identifier = selected["id"]
+    if os.environ.get("CONFORMANT_JOURNAL"):
+        # what ran, for the tests: the command, its options and its operands, once every refusal is behind
+        with open(os.environ["CONFORMANT_JOURNAL"], "a", encoding="utf-8") as journal:
+            journal.write(json.dumps({"command": identifier, "options": options, "operands": operands},
+                                     sort_keys=True) + "\n")
     if selected["outputMode"] == "protocol-stream" and BREAK != "stream-renders":
-        return 0  # the stream itself: with stdin closed there is nothing to say, and stdout stays the protocol's
+        # the stream itself: one line of its protocol, and stdout stays the protocol's
+        sys.stdout.write('{"jsonrpc":"2.0","method":"ready"}\n')
+        return 0
     verbose = options.get("--verbose", False)
     progress = options.get("--progress", "auto")
     if progress not in ("auto", "always", "never"):
@@ -850,6 +898,9 @@ def main(argv):
         text = f"{PROGRAM} 1.0.0\n"
     elif identifier == "help":
         text = "usage\n"
+        if DEFAULT and not operands:
+            pattern = " ".join(next(item for item in CATALOG if item["id"] == DEFAULT)["pattern"])
+            text += f"default command: {DEFAULT}, run as `{PROGRAM} [OPTIONS] [-- OPERANDS]` or `{PROGRAM} {pattern} ...`\n"
         if operands and operands[0] not in by_id and BREAK != "help-unknown-general":
             return fail("help", "INVALID_COMMAND", f"Unknown command identifier {operands[0]!r}.", fmt, compact)
         if operands and operands[0] in by_id:
@@ -888,6 +939,8 @@ def main(argv):
                                     "stderr": "diagnostics and failure envelopes"}, "commands": CATALOG})
             if BREAK == "malformed-catalog":
                 data["commands"] = [{"id": "version", "input": None}]
+        if DEFAULT and not (BREAK == "default-missing-in-summary" and data["kind"] == "summary"):
+            data["defaultCommand"] = DEFAULT
         text = json.dumps(data, indent=2) + "\n"
     elif identifier in ("completion", "completion.install"):
         shell = operands[0] if operands else ""
@@ -919,6 +972,9 @@ def main(argv):
     elif identifier == "complete.candidates":
         current = operands[-1] if operands else ""
         given = operands[:-1]
+        default_pattern = next((item["pattern"] for item in CATALOG if item["id"] == DEFAULT), None)
+        if default_pattern and given and given[0].startswith("-") and given[0] not in ("--help", "--version"):
+            given = default_pattern + given  # section 8: after a first option, the words are the default command's
         # the longest pattern the words begin with: `completion install` and not `completion`
         target = max((item for item in CATALOG if given and given[:len(item["pattern"])] == item["pattern"]),
                      key=lambda item: len(item["pattern"]), default=None)
@@ -938,8 +994,13 @@ def main(argv):
         elif target is not None:
             matching = []
         else:
-            # no command yet: the next word of the commands these words begin, none when they begin none
-            matching = sorted(word for word in next_words(given) if word.startswith(current))
+            # no command yet: the next word of the commands these words begin, none when they begin none; at the root,
+            # a word that starts with a dash is also completed with the options of the default command
+            words = next_words(given)
+            if default_pattern and not given and current.startswith("-"):
+                words |= {word for word in candidate_words(next(item for item in CATALOG if item["id"] == DEFAULT))
+                          if word.startswith("-")}
+            matching = sorted(word for word in words if word.startswith(current))
         data = {"count": len(matching), "records": [{"word": word} for word in matching]}
         header = "WORD\n" if sys.stdout.isatty() or BREAK == "header-in-pipe" else ""
         text = header + record_text(data["records"])
@@ -947,6 +1008,8 @@ def main(argv):
             text = "\x1b[31mgarbage\x1b[0m\n" * len(matching)
         if BREAK == "delegate-format-drift" and target is not None and target["external"]:
             text = "a-word-only-text-mode-offers\n"
+    elif identifier == "stamp":
+        data, text = {"stamped": True}, "stamped\n"
     else:
         data = {"mode": "apply" if options.get("--apply") else "plan", "changed": False}
         text = f"note: {data['mode']}\n"

@@ -18,9 +18,10 @@ class FixtureProgram:
     """The fixture in memory. Without a `command` the kit skips what needs a real process, the
     completion scripts driven in their shells; `shells=True` names one, at the cost of seconds."""
 
-    def __init__(self, defect="", transform=None, shells=False, static=False):
+    def __init__(self, defect="", transform=None, shells=False, static=False, default=""):
+        """`default` declares a default command, through the variable the fixture reads at import."""
         self.env = {"NO_COLOR": "1", "PAGER": "", "CONFORMANT_BREAK": defect,
-                    "CONFORMANT_COMPLETION": "static" if static else ""}
+                    "CONFORMANT_COMPLETION": "static" if static else "", "CONFORMANT_DEFAULT": default}
         if shells:
             self.command = [sys.executable, str(FIXTURE)]
             self.timeout = 10

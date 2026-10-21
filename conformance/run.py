@@ -841,6 +841,76 @@ def check_completion_scripts(report: Report, program: Program, catalog: dict, co
                                carried, "" if carried else f"version {catalog.get('version')!r} is not in the script")
 
 
+SECTION_6 = {"help", "version", "describe", "completion", "complete.candidates", "completion.install"}
+
+
+def check_default_command(report: Report, program: Program, catalog: dict, by_id: dict, honours_help: bool) -> None:
+    """Sections 1 and 8: what a catalog may name as its default command, and how a line that names no command is
+    read. The kit never runs the default command of a program: every line it sends carries `--help`, and only to
+    a program that has shown it honours `--help` after a command. That a line selecting the default and the same
+    line after its pattern give the same answer is tried on the reference fixture, by this repository's tests."""
+    default = catalog.get("defaultCommand")
+    if default is None:
+        return
+    command = by_id.get(default)
+    why = "names no command of the catalog" if command is None \
+        else "names a command this build cannot run" if command.get("available") is False \
+        else "names a hidden command" if command.get("hidden") is True \
+        else "names a command of section 6" if default in SECTION_6 \
+        else "names a delegate" if command.get("external") or command["input"].get("passthrough") \
+        else "names an execute command" if command.get("effect") == "execute" else ""
+    report.add("defaultCommand names an available, visible command of the program's own that reads, streams or plans",
+               not why, f"{default!r} {why}")
+    if why:
+        return
+    if not honours_help:
+        report.skip("the checks of a line that names no command",
+                    "the program has not shown that it honours --help after a command, and every such line would "
+                    "run the default command")
+        return
+    # a first option selects the default command: its help, the same as after its pattern, and not the general one
+    implicit = program.run("--non-interactive", "--help")
+    explicit = program.run(*command["pattern"], "--non-interactive", "--help")
+    whole = program.run("--help", "--non-interactive")
+    report.add("a first option and --help give the help of the default command, as its pattern and --help do",
+               implicit.returncode == 0 and implicit.stdout != "" and implicit.stdout == explicit.stdout
+               and implicit.stdout != whole.stdout,
+               f"exit {implicit.returncode}, {implicit.stdout[:50]!r}; after the pattern {explicit.stdout[:50]!r}")
+    # --help as the first word stays the general help
+    general = program.run("--help", "--json", "--non-interactive")
+    try:
+        listed = parse_json(general.stdout)["data"]["commands"] if general.returncode == 0 else None
+    except (ValueError, KeyError, TypeError):
+        listed = None
+    report.add("--help as the first word gives the general help, not the default command's",
+               isinstance(listed, list) and listed != [default], f"commands {str(listed)[:120]}")
+    # no word further on is a command, nor an operand of the default before --; a word with one dash is refused
+    for words, what in ((["--json", "kit-bare-word", "--help"], "a bare word after a first option is refused"),
+                        (["-x", "--help", "--json"], "a word with one dash in first place is refused")):
+        refused = program.run(*words, "--non-interactive")
+        check_failure(report, f"{what}, in the name of the default command", refused, "VALIDATION_FAILED",
+                      command=default)
+    # an unknown first word is never the default command
+    check_failure(report, "an unknown first word fails with INVALID_COMMAND, the default command notwithstanding",
+                  program.run("kit-no-such-command", "--help", "--json"), "INVALID_COMMAND")
+
+    def offered(*words: str) -> set:
+        answer = program.run("__complete", "--format", "json", "--non-interactive", "--", *words)
+        try:
+            return {record["word"] for record in parse_json(answer.stdout)["data"]["records"]}
+        except (ValueError, KeyError, TypeError):
+            return set()
+    # completion reads the words as the line is read
+    own = {item["long"] for item in command["input"]["options"] if item.get("hidden") is not True}
+    root = offered("--")
+    report.add("__complete at the root offers the default command's options to a word that starts with a dash",
+               own <= root, f"missing {sorted(own - root)[:6]}")
+    after = offered("--non-interactive", "")
+    explicit = offered(*command["pattern"], "--non-interactive", "")
+    report.add("__complete after a first option completes the default command's words",
+               after == explicit, f"after the option {sorted(after)[:6]}, after the pattern {sorted(explicit)[:6]}")
+
+
 def check_delegate_completion(report: Report, program: Program, catalog: dict, commands: list[dict]) -> None:
     """Section 9: after a delegate's pattern the words are the delegate's, the same in every format. That
     the program adds none of its own cannot be told from names: a delegate built on the same trunk has the
@@ -1152,6 +1222,9 @@ def _run_kit(program: Program, report: Report) -> Report:
                        data.get("kind") == "command" and json_equal(data.get("commands"), [command])
                        and not any(key in data for key in ("globalOptions", "invariants", "output")),
                        "kind, descriptor or inventory members differ")
+            report.add(f"{identifier}: describe {identifier} carries the catalog's defaultCommand",
+                       data.get("defaultCommand") == catalog.get("defaultCommand"),
+                       f"{data.get('defaultCommand')!r}, catalog {catalog.get('defaultCommand')!r}")
     summary = program.run("describe", "--summary", "--format", "json", "--compact", "--non-interactive")
     body = envelope(report, "describe --summary envelope", summary, expect_ok=True)
     if body is not None:
@@ -1159,6 +1232,9 @@ def _run_kit(program: Program, report: Report) -> Report:
         issues = validate(data, SCHEMAS["describe"])
         report.add("describe --summary matches schemas/describe.json", not issues, issues_text(issues))
         report.add("describe --summary kind is summary", data.get("kind") == "summary")
+        report.add("describe --summary carries the catalog's defaultCommand",
+                   data.get("defaultCommand") == catalog.get("defaultCommand"),
+                   f"{data.get('defaultCommand')!r}, catalog {catalog.get('defaultCommand')!r}")
         report.add("describe --summary lists the same identifiers",
                    [command.get("id") for command in data.get("commands", [])] == every)
         report.add("describe --summary omits schemas and exit codes",
@@ -1198,6 +1274,9 @@ def _run_kit(program: Program, report: Report) -> Report:
                        not any("examples" in item for item in data.get("commands", [])))
             report.add("describe filtered summary omits catalog-only members",
                        not any(key in data for key in ("globalOptions", "invariants", "output")))
+            report.add("describe filtered summary carries the catalog's defaultCommand",
+                       data.get("defaultCommand") == catalog.get("defaultCommand"),
+                       f"{data.get('defaultCommand')!r}, catalog {catalog.get('defaultCommand')!r}")
         check_failure(report, "describe --prefix of a known prefix without --summary fails with VALIDATION_FAILED",
                       program.run("describe", "--prefix", prefix, "--format", "json"), "VALIDATION_FAILED")
     check_failure(report, "describe --prefix of an unknown prefix without --summary still fails with VALIDATION_FAILED",
@@ -1294,6 +1373,7 @@ def _run_kit(program: Program, report: Report) -> Report:
                    verbose_false.returncode == 0 and verbose_false.stdout == plain_text.stdout
                    and verbose_false.stderr == "",
                    f"exit {verbose_false.returncode}, stderr {verbose_false.stderr[:80]!r}")
+    honours_help = False
     help_run = program.run("help", "--format", "json")
     body = envelope(report, "help envelope", help_run, expect_ok=True)
     if body is None:
@@ -1325,9 +1405,9 @@ def _run_kit(program: Program, report: Report) -> Report:
             answer, shown = {}, {}
         report.add("version --help: the envelope names help, whose data it carries", answer.get("command") == "help",
                    f"command {answer.get('command')!r}")
-        report.add("version --help gives the help of version, not the identity of the product",
-                   isinstance(shown, dict) and isinstance(shown.get("text"), str) and "version" not in shown,
-                   f"exit {asked.returncode}, data members {sorted(shown) if isinstance(shown, dict) else shown!r}")
+        honours_help = report.add("version --help gives the help of version, not the identity of the product",
+                                  isinstance(shown, dict) and isinstance(shown.get("text"), str) and "version" not in shown,
+                                  f"exit {asked.returncode}, data members {sorted(shown) if isinstance(shown, dict) else shown!r}")
         report.add("version --help names version alone in data.commands",
                    isinstance(shown, dict) and shown.get("commands") == ["version"],
                    f"commands {str(shown.get('commands') if isinstance(shown, dict) else shown)[:120]}")
@@ -1479,6 +1559,7 @@ def _run_kit(program: Program, report: Report) -> Report:
     check_completion_scripts(report, program, catalog, commands, scripts)
     check_delegate_completion(report, program, catalog, commands)
     check_completion_install(report, program, by_id)
+    check_default_command(report, program, catalog, by_id, honours_help)
     body = candidate_body
     if body is not None:
         issues = validate(body["data"], SCHEMAS["records"])
@@ -1605,6 +1686,8 @@ def main(argv: list[str]) -> int:
                                         "whose grammar the contract leaves open, and whether `help` shows it",
                                         "`--help` and `--version` after a command that may write, except "
                                         "`completion install`",
+                                        "running a program's default command: the kit sends a line that names no "
+                                        "command only with --help, and only to a program that honours it",
                                         "the order of the refusals beyond the lines above, and an unavailable "
                                         "command that may write, takes an operand or owns its stdout"]}}
     if report_path:

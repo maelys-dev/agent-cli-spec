@@ -19,8 +19,8 @@ schemas/*.json          the machine-readable form: describe document, envelope, 
                         completion install
 conformance/run.py      the kit: drives a program and reports detected violations
 examples/               reference.describe.json, one catalog carrying every member the
-                        contract allows, and maelys-cli's committed contract at its v0.6.5,
-                        the catalogs of two real programs
+                        contract allows, default-command.describe.json, the same declaring a
+                        default command, and maelys-cli's committed contract at its v0.6.5
 tests/invocations.py    command lines generated from a catalog, for the owner of a program
 ```
 

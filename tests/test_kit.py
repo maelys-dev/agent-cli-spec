@@ -133,11 +133,13 @@ class CoverageTest(unittest.TestCase):
             elif isinstance(node, list):
                 for item in node:
                     walk(item)
-        for arguments in (("describe",), ("describe", "--summary"), ("describe", "--summary", "--prefix", "note"),
-                          ("describe", "limits")):
-            body = json.loads(program.run(*arguments, "--json").stdout)
-            self.assertTrue(body["ok"], arguments)
-            walk(body["data"])
+        # the reference fixture, and its variant that declares a default command
+        for program in (program, FixtureProgram(default="limits")):
+            for arguments in (("describe",), ("describe", "--summary"), ("describe", "--summary", "--prefix", "note"),
+                              ("describe", "limits")):
+                body = json.loads(program.run(*arguments, "--json").stdout)
+                self.assertTrue(body["ok"], arguments)
+                walk(body["data"])
         return names, values
 
     def expected(self):
@@ -180,6 +182,13 @@ class CoverageTest(unittest.TestCase):
         committed = json.loads((ROOT / "examples" / "reference.describe.json").read_text())
         self.assertEqual(committed, catalog)
         self.assertEqual(validate(committed, SCHEMAS["describe"]), [])
+        # examples/default-command.describe.json: the same catalog declaring a default command, regenerated with
+        # `CONFORMANT_DEFAULT=limits python3 tests/fixtures/conformant.py describe --json`
+        declaring = json.loads(FixtureProgram(default="limits").run("describe", "--json").stdout)["data"]
+        committed = json.loads((ROOT / "examples" / "default-command.describe.json").read_text())
+        self.assertEqual(committed, declaring)
+        self.assertEqual(validate(committed, SCHEMAS["describe"]), [])
+        self.assertEqual({key: value for key, value in committed.items() if key != "defaultCommand"}, catalog)
 
     def test_the_fixture_carries_every_member_the_schema_allows(self) -> None:
         present, _ = self.collected()
@@ -276,6 +285,24 @@ class KitTest(unittest.TestCase):
                 self.assertFalse(report.passed)
                 failed = [check["name"] for check in report.checks if check["passed"] is False]
                 self.assertTrue(any(expected in name for name in failed), failed)
+
+    def test_broken_default_commands_fail(self) -> None:
+        """Each check of a default command, proved by a defect of the fixture that only it can see."""
+        for default, defect, expected in (
+                ("stamp", "default-unchecked", "defaultCommand names an available"),
+                ("tool", "default-unchecked", "defaultCommand names an available"),
+                ("offline", "default-unchecked", "defaultCommand names an available"),
+                ("limits", "default-missing-in-summary", "describe --summary carries the catalog's defaultCommand"),
+                ("limits", "default-help-general", "give the help of the default command"),
+                ("limits", "default-bare-absorbed", "a bare word after a first option is refused")):
+            with self.subTest(default=default, defect=defect):
+                report = run_kit(FixtureProgram(defect, default=default))
+                failed = [check["name"] for check in report.checks if check["passed"] is False]
+                self.assertTrue(any(expected in name for name in failed), failed)
+        for default in ("limits", "note.write", "serve"):
+            with self.subTest(default=default):
+                report = run_kit(FixtureProgram(default=default))
+                self.assertTrue(report.passed, [check for check in report.checks if check["passed"] is False])
 
     def test_completion_scripts_are_driven_in_every_installed_shell(self) -> None:
         """A shell that is installed is driven, never skipped: a harness that stops working fails here."""

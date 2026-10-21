@@ -5,6 +5,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 
 | Tag | A program fails from this tag when |
 | --- | --- |
+| Unreleased | it declares a `defaultCommand` that is missing, unavailable, hidden, of section 6, a delegate or an `execute` command, or leaves it out of a form of `describe`; with a default declared, a first option and `--help` do not give the default command's help, `--help` in first place does not give the general help, a bare word after a first option or a one-dash word in first place is not refused in the default command's name, an unknown first word is not refused with `INVALID_COMMAND`, or `__complete` does not read its words as the line is read |
 | 2.15.0 | it does not refuse a repeated `--field`; its static completion script does not carry its version as a word; `__complete` does not offer the next word of a multi-word command, or the declared choices; it reads a word that starts with one dash as an operand; `--json` wins over a later `--format text`, or `--compact` over a later `--pretty`; an example of its catalog has a value outside the grammars of section 3; its catalog declares `preview`, `apply` or `commit` outside a transaction, `passthrough` without `external`, an identifier with an empty segment, or the identifier `unknown` |
 | 2.14.0 | it prints nothing and exits 0 for `COMMAND --help --format jsonl`; it ignores `--version` after a command; it answers `help` of an unknown identifier with the general help; it runs an unavailable command, or refuses its rendering or its help instead of naming the cause |
 | 2.13.0 | it lists every command in `data.commands` for `help COMMAND_ID` |
@@ -14,6 +15,60 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.9.0 | it declares `completion.install` and refuses a `--field` only after it has written; it declares `--expect` on a transaction without the reserved shape |
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
+
+## Unreleased
+
+A program may declare a default command: the command a line that names none
+runs. Asked for an application whose bare name opens its main view. Nothing
+changes for a program that declares none.
+
+- **`defaultCommand`** (section 1) is an optional member of every form of
+  `describe`, the summary, the filtered summary and the command form
+  included. It names a command of the full catalog that is available, not
+  hidden, not one of section 6, not a delegate and not `passthrough`, whose
+  effect is `read`, `stream` or a transaction. An `execute` command cannot be
+  the default: a line that names nothing is no consent to an action. A
+  program refuses to run with a catalog that declares any other, before it
+  runs anything. `schemas/describe.json` gives the shape and refuses the
+  identifiers of section 6 and `unknown`.
+- **A line that names no command** (section 8), in a program that declares a
+  default and in it alone: step 1 reads the first word, and that word only.
+  `--help` and `--version` there select help and version, as everywhere. The
+  first word of a command's pattern resolves as usual. Any other word that
+  starts with `-`, and an empty line, select the default command. Any other
+  word fails with `INVALID_COMMAND`: an unknown word is never taken for an
+  operand of the default, so that a typing error is told and not run. No
+  word further on is sought as a command: `PROGRAM --label list` gives
+  `--label` the value `list`, and `PROGRAM --json list` does not run `list`;
+  a bare word before `--` is refused at step 2 in the name of the default
+  command, whose operands are written after `--`. A word with one dash,
+  `-h` included, selects the default and fails at step 2 in its name. The
+  selected command is the default in every respect: validation, help,
+  effect, envelope. A line that selects it and the same line after its
+  pattern give the same answer.
+- **The kit never runs a program's default command.** It checks the
+  declaration and its presence in every form, then, and only for a program
+  that has shown it honours `--help` after a command, lines that carry
+  `--help`: the help of the default after a first option, the general help
+  for `--help` in first place, a bare word and a one-dash word refused in the
+  default's name, an unknown first word refused with `INVALID_COMMAND`, and
+  completion read as the line is read. **A program that declares a default
+  and breaks one of these fails from this version**; one that declares none
+  is not concerned.
+- **The fixture declares a default when `CONFORMANT_DEFAULT` names one**, and
+  writes what reached a handler to the file `CONFORMANT_JOURNAL` names: the
+  tests prove, line by line, which handler ran and that none ran for a
+  refusal, a help, a version, a description or a completion. They cover a
+  default that reads, one that plans and stays a plan without `--apply`, one
+  that streams and keeps its bytes on a terminal, every declaration a
+  program must refuse, and, without a default, the lines that start with an
+  option answered as in 2.15.1. A new command, `stamp`, gives the fixture an
+  `execute` command that is not a delegate; its stream command writes one
+  line of its protocol. `examples/default-command.describe.json` is the
+  reference catalog declaring a default.
+- The generated command lines write every line of the default command
+  without its pattern and require the same answer as with it, and the
+  refusal of a bare word before `--`.
 
 ## 2.15.1 — 2026-10-09
 

@@ -16,6 +16,9 @@
     "framework": {"type": "string"},
     "commands": {"type": "array", "items": {"$ref": "#/definitions/descriptor"}},
     "filter": {"$ref": "#/definitions/filter"},
+    "defaultCommand": {"type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$",
+                       "not": {"enum": ["unknown", "help", "version", "describe", "completion", "complete.candidates",
+                                        "completion.install"]}},
     "globalOptions": {"type": "array", "items": {"$ref": "#/definitions/option"}},
     "invariants": {"type": "array", "items": {"type": "string"}},
     "output": {

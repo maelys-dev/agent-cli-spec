@@ -74,6 +74,19 @@ PROGRAM describe COMMAND_ID --format json       # one descriptor
 | `commands` | the descriptors: all of them, the one asked, or those of a prefix |
 | `globalOptions`, `invariants`, `output` | the catalog form only |
 | `filter` | the filtered-summary selection, present only with `--summary --prefix PREFIX` |
+| `defaultCommand` | the identifier of the command a line that names none runs, when the program declares one (section 8); in every form |
+
+`defaultCommand` is optional, and a catalog without it is read as before in
+every respect. When present, it names a command of the full catalog that is
+available, not hidden, not one of section 6 (the built-ins and
+`completion.install`), not a delegate and not `passthrough`, and whose effect
+is `read`, `stream` or a transaction. An `execute` command cannot be the
+default: a line that names nothing is no consent to an action. A program MUST
+refuse to run with a catalog that declares any other, before it runs
+anything. Every form of `describe` carries the member, the summary, the
+filtered summary and the command form included, even when the command it
+names is not among those the form lists: it says how the program reads a
+line, not which commands are shown.
 
 `describe --summary` omits `outputSchema`, `exitCodes` and `examples` from
 each descriptor: it is the form an agent reads to choose a command, and what
@@ -628,7 +641,8 @@ underlying process, `128 + signal` on signal termination.
 
 Errors are reported in this causal order:
 
-1. command resolution (`INVALID_COMMAND`);
+1. command resolution (`INVALID_COMMAND`), with the default command in a
+   program that declares one (below);
 2. what one option says alone: its spelling, its support by the command, its
    duplication, the kind, range and choice of its value;
 3. `--help` on the line, when the command is neither a delegate nor
@@ -670,6 +684,47 @@ on the line wins. `--json` and `--format` set the format, `--compact` and
 and its own user adds another at the end of the line. The same option
 written twice is still a duplication of step 2: `--json --json`, `--format
 json --format text`.
+
+### A line that names no command
+
+In a program whose catalog declares `defaultCommand`, and in it alone, step
+1 reads the first word of the line, and that word only:
+
+- `--help` or `--version` selects `help` or `version`, as in every program
+  (section 6);
+- the first word of a command's pattern resolves as usual, a command of
+  several words included;
+- any other word that starts with `-` (an option, `--`, a word with one
+  dash) selects the default command, and so does an empty line;
+- any other word fails with `INVALID_COMMAND`. An unknown word is never
+  taken for an operand of the default command: a typing error is told, not
+  run.
+
+No word further on is sought as a command. When the first word selected the
+default command, the rest of the line is that command's, read by its
+declaration from step 2 on. A word an option takes as its value is that
+value, a command's name or not: `PROGRAM --label list` gives `--label` the
+value `list`. Before `--`, a word that is neither an option nor the value of
+one is not an operand of the default command: the line fails at step 2 with
+`VALIDATION_FAILED`, in the name of the default command. `PROGRAM --json
+list` does not run `list`, `PROGRAM list --json` does. The operands of the
+default command are written after `--`: `PROGRAM -- FILE`. A word with one
+dash, `-h` included, fails at step 2 in the name of the default command, as
+it would after that command's pattern.
+
+The selected command is the default command in every respect: its
+validation, its help (`PROGRAM --label VALUE --help` gives the help of the
+default command and runs nothing), its effect, a transaction planning
+without `--apply` and a stream keeping its stdout, and its envelope, which
+names it. A line that selects the default command and the same line written
+after its pattern give the same answer. `help` SHOULD say which command is
+the default and show it invoked both ways. `__complete` reads its words as
+the line would be read: after a first option they are completed as the
+default command's, and at the root a word that starts with `-` is completed
+with the options of the default command among the candidates.
+
+In a program that declares no default command none of this applies: a line
+that starts with an option is read as it was.
 
 ### Error codes
 
