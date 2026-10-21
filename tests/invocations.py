@@ -139,6 +139,61 @@ def lines(command: dict, rng: random.Random, count: int) -> list[list[str]]:
     return [line for line in found if line]
 
 
+def implicit_lines(command: dict, global_options: list[dict], explicit: list[list[str]]) -> list[tuple[list[str], list[str]]]:
+    """Section 8: for the default command, each of its lines written without its pattern, paired with the same
+    words after the pattern. The options come first, the operands after `--`; a line whose first word would be
+    `--help` or `--version` is left out, those words selecting help and version in first place. A copy of each
+    with a bare word before `--` is paired with None: that word must be refused."""
+    pattern = list(command["pattern"])
+    valued = {item["long"] for item in command["input"]["options"] + global_options if item.get("argument")}
+    pairs, seen = [], set()
+    for words in explicit:
+        if words[:len(pattern)] != pattern:
+            continue
+        rest = words[len(pattern):]
+        head, tail = (rest[:rest.index("--")], rest[rest.index("--") + 1:]) if "--" in rest else (rest, [])
+        options, operands, index = [], [], 0
+        while index < len(head):
+            word = head[index]
+            if word.startswith("-") and word != "-":
+                options.append(word)
+                if word in valued and "=" not in word and index + 1 < len(head):
+                    options.append(head[index + 1])
+                    index += 1
+            else:
+                operands.append(word)
+            index += 1
+        implicit = options + (["--", *operands, *tail] if operands or tail else [])
+        if implicit[:1] in (["--help"], ["--version"]) or tuple(implicit) in seen:
+            continue
+        seen.add(tuple(implicit))
+        pairs.append((implicit, pattern + implicit))
+        if options:
+            # a bare word right after the first option, or after its value when it takes one
+            place = 2 if options[0] in valued and len(options) > 1 else 1
+            pairs.append((options[:place] + ["kit-bare-word"] + options[place:] + implicit[len(options):], None))
+    return pairs
+
+
+def implicit_violations(default: str, implicit: list[str], done, explicit_done) -> list[str]:
+    """What a line that names no command does that section 8 forbids: answer otherwise than the same line after
+    the default command's pattern, or take a bare word before `--` for an operand."""
+    if explicit_done is not None:
+        # a success is the same bytes; a refusal the same code, the order of the refusals within a step being open
+        same = (done.returncode, done.stdout, done.stderr) == (explicit_done.returncode, explicit_done.stdout,
+                                                              explicit_done.stderr) if done.returncode != 1 \
+            else (explicit_done.returncode == 1 and done.stdout == explicit_done.stdout == ""
+                  and failure_code(done.stderr) == failure_code(explicit_done.stderr))
+        if not same:
+            return [f"implicit-differs: the line answers otherwise than after the pattern of {default}"]
+        return []
+    if done.returncode != 1 or failure_code(done.stderr) != "VALIDATION_FAILED":
+        return [f"implicit-absorbs: a bare word before -- is taken as an operand of {default} (exit {done.returncode})"]
+    if done.stderr.lstrip().startswith("{") and json.loads(done.stderr).get("command") != default:
+        return [f"implicit-absorbs: the refusal of a bare word does not name {default}"]
+    return []
+
+
 def unknown_lines() -> list[list[str]]:
     """Lines that name no command: resolution fails first, whatever else they carry (section 8, step 1)."""
     name = "kit-no-such-command"
@@ -343,6 +398,22 @@ def main(argv: list[str]) -> int:
             for violation in unknown_violations(words, run(words, sandbox)):
                 name, detail = violation.split(": ", 1)
                 found.setdefault((name, detail), []).append(("unknown", words))
+        default = next((command for command in catalog["commands"] if command["id"] == catalog.get("defaultCommand")), None)
+        if default is not None and not opaque(default):
+            # a line that names no command runs the default command: an owner's tool, as every other line here
+            for implicit, explicit in implicit_lines(default, catalog["globalOptions"],
+                                                     lines(default, random.Random(2130), count)):
+                if flag(before_separator(implicit), "--apply") and not with_apply:
+                    continue
+                for name in ("home", "work"):
+                    shutil.rmtree(sandbox / name, ignore_errors=True)
+                    (sandbox / name).mkdir()
+                done = run(implicit, sandbox)
+                again = run(explicit, sandbox) if explicit is not None else None
+                total += 1
+                for violation in implicit_violations(default["id"], implicit, done, again):
+                    name, detail = violation.split(": ", 1)
+                    found.setdefault((name, detail), []).append((default["id"], implicit))
         for default in ["text"] + (["json"] if variable else []):
             rng = random.Random(2130)
             for command in catalog["commands"]:

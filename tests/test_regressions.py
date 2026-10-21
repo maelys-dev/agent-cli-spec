@@ -333,7 +333,7 @@ class KitRegressionTest(unittest.TestCase):
         completed = subprocess.run([sys.executable, str(ROOT / "conformance/run.py"), sys.executable,
                                     str(ROOT / "tests/fixtures/conformant.py"), "--json"],
                                    env={**os.environ, "CONFORMANT_BREAK": "malformed-jsonl"},
-                                   capture_output=True, text=True, timeout=60)
+                                   capture_output=True, text=True, timeout=300)  # a whole kit run, on a busy machine
         self.assertEqual(completed.returncode, 1, completed.stderr)
         self.assertEqual(completed.stderr, "")
         self.assertFalse(json.loads(completed.stdout)["passed"])

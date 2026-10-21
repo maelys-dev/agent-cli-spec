@@ -48,7 +48,37 @@ def survey(program, count: int, defaults=("text",)) -> dict[str, list[str]]:
     return found
 
 
+def implicit_survey(default: str) -> dict[str, list[str]]:
+    """Section 8: every line of the default command written without its pattern, against the line after it."""
+    program = FixtureProgram(default=default)
+    catalog = json.loads(program.run("describe", "--json").stdout)["data"]
+    command = next(entry for entry in catalog["commands"] if entry["id"] == default)
+    found: dict[str, list[str]] = collections.defaultdict(list)
+    for implicit, explicit in invocations.implicit_lines(command, catalog["globalOptions"],
+                                                         invocations.lines(command, random.Random(2130), 10)):
+        done = program.run(*implicit)
+        again = program.run(*explicit) if explicit is not None else None
+        for violation in invocations.implicit_violations(default, implicit, done, again):
+            found[violation.split(": ", 1)[0]].append(" ".join(implicit))
+    return found
+
+
 class GeneratedInvocationsTest(unittest.TestCase):
+    def test_a_line_that_names_no_command_answers_as_the_default_command_does(self):
+        """For a default that reads and one that plans: each implicit line answers as the same words after the
+        pattern, and a bare word before `--` is refused in the default command's name. A stream is never run by
+        the generated lines; test_default_command holds one on a terminal."""
+        for default in ("limits", "note.write"):
+            with self.subTest(default=default):
+                self.assertEqual(dict(implicit_survey(default)), {})
+        broken = FixtureProgram("default-bare-absorbed", default="limits")
+        catalog = json.loads(broken.run("describe", "--json").stdout)["data"]
+        command = next(entry for entry in catalog["commands"] if entry["id"] == "limits")
+        pairs = invocations.implicit_lines(command, catalog["globalOptions"], invocations.lines(command, random.Random(2130), 2))
+        absorbed = [implicit for implicit, explicit in pairs if explicit is None
+                    and invocations.implicit_violations("limits", implicit, broken.run(*implicit), None)]
+        self.assertTrue(absorbed, "the defect that takes a bare word for an operand is not seen")
+
     def test_the_fixture_does_what_the_contract_says_of_every_generated_line(self):
         """Some nine hundred lines built from the fixture's own catalog. Two defects of the fixture were found by
         accident before this existed: it wrote before it refused --field, and it ran a command under --help."""
@@ -83,7 +113,8 @@ class GeneratedInvocationsTest(unittest.TestCase):
             handed = program.run("tool", *words)
             self.assertEqual((handed.returncode, handed.stdout, handed.stderr), (0, " ".join(["child:", *words]) + "\n", ""))
         self.assertEqual(program.run("tool", "--fail").returncode, 7)
-        self.assertEqual((program.run("serve").returncode, program.run("serve").stdout), (0, ""))
+        self.assertEqual((program.run("serve").returncode, program.run("serve").stdout),
+                         (0, '{"jsonrpc":"2.0","method":"ready"}\n'))
         for words in (["--format", "json"], ["--json"], ["--compact"], ["--pretty"], ["--pager", "never"], ["--field", "x"]):
             refused = program.run("serve", *words)
             self.assertEqual((refused.returncode, refused.stdout), (1, ""), words)

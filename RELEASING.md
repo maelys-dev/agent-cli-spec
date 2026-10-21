@@ -61,6 +61,23 @@ Then, before any tag:
 - the changelog entry says in bold what makes a program fail from this
   version, and the table at its top gains a row.
 
+### Trying a candidate that is not released
+
+A candidate is a commit, never a tag. Whoever implements against it fetches
+that commit and names it by its hash; nothing is tagged, and no pin file
+records it, a pin naming a released tag only.
+
+```sh
+git -C agent-cli-spec fetch PATH-OR-URL BRANCH
+git -C agent-cli-spec checkout --detach COMMIT
+agent-cli-spec/conformance/run.py build/bin/my-program
+agent-cli-spec/tests/invocations.py build/bin/my-program
+```
+
+`PATH-OR-URL` is a local clone or the repository; `COMMIT` is the full hash
+sent with the candidate. A test report that names a candidate says
+"candidate COMMIT", never a version.
+
 With maelys-cli the exchange is on commits: each side names the commit to
 try, runs the other's unreleased work, and sends everything it found in one
 message. One tag is cut on each side when both have agreed on a named pair

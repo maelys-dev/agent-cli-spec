@@ -730,8 +730,7 @@
             ]
           }
         ],
-        "passthrough": false,
-        "x-form": "exhaustive"
+        "passthrough": false
       },
       "outputSchema": {
         "type": "object"
@@ -740,8 +739,7 @@
         "0": "command completed",
         "1": "execution failed",
         "2": "valid report with violations"
-      },
-      "x-since": "2.4.1"
+      }
     },
     {
       "id": "serve",
@@ -760,7 +758,8 @@
         "operands": [],
         "options": [],
         "constraints": [],
-        "passthrough": false
+        "passthrough": false,
+        "x-form": "exhaustive"
       },
       "outputSchema": {
         "type": "object"
@@ -770,7 +769,8 @@
         "1": "execution failed",
         "2": "valid report with violations"
       },
-      "protocol": "mcp-json-rpc"
+      "protocol": "mcp-json-rpc",
+      "x-since": "2.4.1"
     },
     {
       "id": "tool",
@@ -808,6 +808,34 @@
           "summary": "Ask the child its version."
         }
       ]
+    },
+    {
+      "id": "stamp",
+      "pattern": [
+        "stamp"
+      ],
+      "usage": "stamp",
+      "purpose": "Run an action that is not a transaction.",
+      "effect": "execute",
+      "outputMode": "json-envelope",
+      "external": false,
+      "hidden": false,
+      "available": true,
+      "input": {
+        "synopsis": "stamp",
+        "operands": [],
+        "options": [],
+        "constraints": [],
+        "passthrough": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "exitCodes": {
+        "0": "command completed",
+        "1": "execution failed",
+        "2": "valid report with violations"
+      }
     },
     {
       "id": "note.commit",
