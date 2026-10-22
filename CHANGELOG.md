@@ -5,7 +5,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 
 | Tag | A program fails from this tag when |
 | --- | --- |
-| Unreleased | it declares a `defaultCommand` that is missing, unavailable, hidden, of section 6, a delegate or an `execute` command, or leaves it out of a form of `describe`; with a default declared, a first option and `--help` do not give the default command's help, `--help` in first place does not give the general help, a bare word after a first option or a one-dash word in first place is not refused in the default command's name, an unknown first word is not refused with `INVALID_COMMAND`, or `__complete` does not read its words as the line is read |
+| 2.16.0 | it declares a `defaultCommand` that is missing, unavailable, hidden, of section 6, a delegate or an `execute` command, or leaves it out of a form of `describe`; with a default declared, a first option and `--help` do not give the default command's help, `--help` in first place does not give the general help, a bare word after a first option or a one-dash word in first place is not refused in the default command's name, an unknown first word is not refused with `INVALID_COMMAND`, or `__complete` does not read its words as the line is read |
 | 2.15.0 | it does not refuse a repeated `--field`; its static completion script does not carry its version as a word; `__complete` does not offer the next word of a multi-word command, or the declared choices; it reads a word that starts with one dash as an operand; `--json` wins over a later `--format text`, or `--compact` over a later `--pretty`; an example of its catalog has a value outside the grammars of section 3; its catalog declares `preview`, `apply` or `commit` outside a transaction, `passthrough` without `external`, an identifier with an empty segment, or the identifier `unknown` |
 | 2.14.0 | it prints nothing and exits 0 for `COMMAND --help --format jsonl`; it ignores `--version` after a command; it answers `help` of an unknown identifier with the general help; it runs an unavailable command, or refuses its rendering or its help instead of naming the cause |
 | 2.13.0 | it lists every command in `data.commands` for `help COMMAND_ID` |
@@ -75,6 +75,8 @@ changes for a program that declares none.
 - The generated command lines write every line of the default command
   without its pattern and require the same answer as with it, and the
   refusal of a bare word before `--`.
+- Adopts maelys-release v0.64.6: two pinned workflows and the managed texts,
+  nothing asked of this repository.
 
 ## 2.15.1 — 2026-10-09
 
