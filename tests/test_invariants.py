@@ -1,14 +1,17 @@
 # SPDX-License-Identifier: MPL-2.0
 """The reference program against generated command lines: see invocations.py."""
 import collections
+import contextlib
+import io
 import json
 import pathlib
 import random
 import shutil
+import sys
 import tempfile
 import unittest
 
-from support import FixtureProgram
+from support import FIXTURE, FixtureProgram
 import invocations
 
 # What the reference program still does that the contract forbids, each with the reason it stands. A gap
@@ -32,7 +35,7 @@ def survey(program, count: int, defaults=("text",)) -> dict[str, list[str]]:
                 built = invocations.lines(command, rng, count)
                 # a delegate starts a child for each line, and the catalog says nothing of what follows its pattern
                 for words in built[:8] if command.get("external") else built:
-                    if invocations.open_reading(words, default):
+                    if invocations.open_reading(invocations.given(command, catalog["globalOptions"], words), default):
                         continue
                     shutil.rmtree(home, ignore_errors=True)
                     home.mkdir()
@@ -78,6 +81,31 @@ class GeneratedInvocationsTest(unittest.TestCase):
         absorbed = [implicit for implicit, explicit in pairs if explicit is None
                     and invocations.implicit_violations("limits", implicit, broken.run(*implicit), None)]
         self.assertTrue(absorbed, "the defect that takes a bare word for an operand is not seen")
+
+    def test_a_word_an_option_takes_as_its_value_is_no_option(self):
+        """`--report --help` gives --report the value `--help`: the line asks no help, and `--report --json` asks no
+        JSON. The judge once read both words as options and found fault with right answers."""
+        program = FixtureProgram()
+        catalog = json.loads(program.run("describe", "--json").stdout)["data"]
+        command = next(entry for entry in catalog["commands"] if entry["id"] == "limits")
+        self.assertEqual(invocations.given(command, catalog["globalOptions"],
+                                           ["limits", "near", "--report", "--help", "--json=true", "--", "--apply"]),
+                         [("--report", "--help"), ("--json", "true")])
+        for tail in (["--report", "--help", "--json"], ["--report", "--json"], ["--report", "--format", "--json"],
+                     ["--depth", "--help"]):
+            with self.subTest(tail=tail):
+                words = ["limits", "near", "--sum=" + "ab" * 32, *tail]
+                self.assertEqual(invocations.violations(command, catalog["globalOptions"], words,
+                                                        program.run(*words), []), [])
+
+    def test_a_spent_budget_is_an_incomplete_campaign_and_no_pass(self):
+        """What ran is reported, the campaign is said incomplete, and the exit is 3, never 0."""
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            code = invocations.main(["--budget", "1", "--timeout", "5", sys.executable, str(FIXTURE)])
+        self.assertEqual(code, 3, printed.getvalue())
+        self.assertIn("campaign incomplete: the budget of 1 seconds ran out after", printed.getvalue())
+        self.assertTrue(printed.getvalue().endswith("nothing found in what ran\n"), printed.getvalue())
 
     def test_a_bare_word_is_never_put_where_it_is_a_value(self):
         """`PROGRAM --label kit-bare-word` gives --label its value: the line is right, and is not one to refuse."""

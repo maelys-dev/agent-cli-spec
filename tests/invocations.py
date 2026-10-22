@@ -11,13 +11,26 @@ home it made, and lines a product may not survive.
 
 It can be pointed at another program, by whoever owns that program:
 
-    python3 tests/invocations.py [--lines N] [--apply] [--reference] [--format-variable NAME] PROGRAM [ARG...]
+    python3 tests/invocations.py [--lines N] [--apply] [--reference] [--format-variable NAME]
+                                 [--timeout SECONDS] [--budget SECONDS] PROGRAM [ARG...]
 
 Each line runs in a directory and a home made for it. A delegate, a `passthrough` command and a stream
 command are never run. Lines carrying `--apply` are left out unless `--apply` is given: with it the
 program is trusted to write only under the directory and the home it is given. `--format-variable` names the
 environment variable by which the program lets the environment pick its default format (`MAELYS_CLI_FORMAT`):
-the lines are then run a second time with it set to `json`.
+the lines are then run a second time with it set to `json`. `--lines` sets the random lines drawn per
+command, on top of those every command gets, not the number of runs.
+
+Each run is given `--timeout` seconds (30), and one that takes longer is reported as `timeout`. `--budget`
+bounds the whole campaign: once it is spent, what was found so far is reported and the campaign is said
+incomplete. Exit 0: complete, nothing found; 1: something found; 3: incomplete, nothing found in what ran,
+which is no pass.
+
+It judges what it observes: the exit code, the two streams, and the files left under the directory and the
+home it gave. A line that runs a command which writes nothing there, writes elsewhere, or removes what it
+wrote escapes it: "--help never runs the command" is checked as "--help leaves no file". It reads the catalog
+with the kit's own reader, so a misreading the two share is seen only by another implementation; each one
+found is kept as a case of its own in tests/test_invariants.py.
 """
 from __future__ import annotations
 
@@ -31,6 +44,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "conformance"))
@@ -217,15 +231,31 @@ def before_separator(words: list[str]) -> list[str]:
     return words[:words.index("--")] if "--" in words else words
 
 
-def open_reading(words: list[str], default: str) -> bool:
+def given(command: dict, global_options: list[dict], words: list[str]) -> list[tuple[str, str | None]]:
+    """The options a line gives before `--`, each with its value or None: a word an option takes as its value
+    is that value and no option, `--label --help` giving --label the value `--help` (section 8)."""
+    valued = {item["long"] for item in command["input"]["options"] + global_options if item.get("argument")}
+    before, options, index = before_separator(words), [], 0
+    while index < len(before):
+        name, equals, value = before[index].partition("=")
+        if name in valued and not equals:
+            options.append((name, before[index + 1] if index + 1 < len(before) else None))
+            index += 1
+        elif name.startswith("--"):
+            options.append((name, value if equals else None))
+        index += 1
+    return options
+
+
+def open_reading(options: list[tuple[str, str | None]], default: str) -> bool:
     """A line the contract does not settle: `--json=false` where the environment selects json is a choice of
     text for one implementation and a flag not given for another."""
-    return default == "json" and "--json=false" in before_separator(words)
+    return default == "json" and ("--json", "false") in options
 
 
-def flag(before: list[str], long: str) -> bool:
+def flag(options: list[tuple[str, str | None]], long: str) -> bool:
     """Whether a flag is given: `--flag` or `--flag=true`; `--flag=false` is a flag not given (section 2)."""
-    return long in before or f"{long}=true" in before
+    return (long, None) in options or (long, "true") in options
 
 
 def failure_code(stderr: str) -> str | None:
@@ -250,20 +280,17 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
 
     `default` is the format the environment selected for this run, where the implementation has such a variable."""
     found: list[str] = []
-    before = before_separator(words)
+    options = given(command, global_options, words)
     code, out, err = completed.returncode, completed.stdout, completed.stderr
-    formats = [before[index + 1] for index, word in enumerate(before[:-1]) if word == "--format"]
     # section 8: of the options that set the format, the last one written wins
     chosen = default
-    for place, word in enumerate(before):
-        if word == "--format" and place + 1 < len(before):
-            chosen = before[place + 1]
-        elif word.startswith("--format="):
-            chosen = word.partition("=")[2]
-        elif word in ("--json", "--json=true"):
+    for name, value in options:
+        if name == "--format" and value is not None:
+            chosen = value
+        elif name == "--json" and value in (None, "true"):
             chosen = "json"
     json_mode, formats = chosen == "json", [chosen]
-    asks = flag(before, "--help")
+    asks = flag(options, "--help")
     # ---- what holds for every line ----
     if code not in (0, 1, 2):
         found.append(f"exit: {code} is not 0, 1 or 2")
@@ -275,7 +302,7 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
         found.append("failure-silent: a failure says nothing on stderr")
     if code == 1 and written:
         found.append(f"failure-writes: a failure wrote {written[:3]}")
-    if not flag(before, "--apply") and written:
+    if not flag(options, "--apply") and written:
         found.append(f"plan-writes: without --apply the line wrote {written[:3]} (section 4)")
     if opaque(command):
         return found
@@ -301,21 +328,22 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
             found.append(f"envelope-command: names {body.get('command')!r}, not {named!r}")
         if code == 1 and body.get("error", {}).get("code") not in CODES:
             found.append(f"error-code: {body.get('error', {}).get('code')!r} is not a code of section 8")
-    records = command["outputMode"] == "json-records" or "--field" in before
+    fields = [value for name, value in options if name == "--field"]
+    records = command["outputMode"] == "json-records" or bool(fields)
     if reference and code != 1 and out == "" and not records:
         found.append("success-silent: a success of a json-envelope command prints nothing")
     # an option of the command may ask for a diagnostic of its own; of the trunk, only --verbose in text mode does
     text_mode = not json_mode and formats[-1:] != ["jsonl"]
     own = {item["long"] for item in command["input"]["options"]}
-    if code != 1 and err != "" and not (text_mode and flag(before, "--verbose")) \
-            and not any(word.partition("=")[0] in own for word in before):
+    if code != 1 and err != "" and not (text_mode and flag(options, "--verbose")) \
+            and not any(name in own for name, _ in options):
         found.append("success-stderr: a success writes to stderr, which only --verbose in text mode allows here")
     if asks:
         # section 8: what one option says alone is judged before --help, what the line lacks as a whole is not,
         # and the rendering is that of help, which is not records
         if alone and failure_code(err) != "VALIDATION_FAILED":
             found += [f"accepts: {kind(issue)}, under --help" for issue in alone]
-        field = "--field" in before
+        field = bool(fields)
         if not alone and code == 1 and not field and formats[-1:] != ["jsonl"]:
             found.append("help-refused: --help on a line that only lacks something as a whole is refused")
         if not alone and formats[-1:] == ["jsonl"] and not field and failure_code(err) != "VALIDATION_FAILED":
@@ -326,7 +354,7 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
     failed = failure_code(err) if code == 1 else None
     if grammar and failed != "VALIDATION_FAILED":
         found += [f"accepts: {kind(issue)}" for issue in grammar]
-    field = before[before.index("--field") + 1] if "--field" in before[:-1] else None
+    field = fields[0] if fields else None
     schema = command.get("outputSchema", {})
     # a read decides on --field from its data, which the catalog does not hold; a command that may write, from
     # the `required` of its outputSchema (section 5)
@@ -361,12 +389,28 @@ def kind(issue: str) -> str:
     return "a value that is not of the declared kind"
 
 
+def fresh(sandbox: pathlib.Path) -> pathlib.Path:
+    """The sandbox emptied, its home and working directories made again: every run starts from the same state."""
+    for name in ("home", "work"):
+        shutil.rmtree(sandbox / name, ignore_errors=True)
+        (sandbox / name).mkdir()
+    return sandbox
+
+
+class Exhausted(Exception):
+    """The campaign's budget is spent."""
+
+
 def main(argv: list[str]) -> int:
     """Run the generated lines against a program and print what it does that the contract forbids."""
-    count, with_apply, reference, variable = 10, False, False, None
-    while argv and argv[0] in ("--lines", "--apply", "--reference", "--format-variable"):
+    count, with_apply, reference, variable, timeout, budget = 10, False, False, None, 30.0, None
+    while argv and argv[0] in ("--lines", "--apply", "--reference", "--format-variable", "--timeout", "--budget"):
         if argv[0] == "--lines":
             count, argv = int(argv[1]), argv[2:]
+        elif argv[0] == "--timeout":
+            timeout, argv = float(argv[1]), argv[2:]
+        elif argv[0] == "--budget":
+            budget, argv = float(argv[1]), argv[2:]
         elif argv[0] == "--format-variable":
             variable, argv = argv[1], argv[2:]
         else:
@@ -378,6 +422,7 @@ def main(argv: list[str]) -> int:
     program = [os.path.abspath(first) if os.path.exists(first) else first] \
         + [os.path.abspath(word) if os.path.exists(word) else word for word in argv[1:]]
     kept = {key: value for key, value in os.environ.items() if key not in ("MAELYS_CLI_FORMAT", variable)}
+    deadline = time.monotonic() + budget if budget is not None else None
 
     def run(words: list[str], sandbox: pathlib.Path, default: str = "text") -> subprocess.CompletedProcess:
         home = sandbox / "home"
@@ -385,60 +430,84 @@ def main(argv: list[str]) -> int:
                "XDG_CONFIG_HOME": str(home / ".config"), "ZDOTDIR": str(home)}
         if variable and default != "text":
             env[variable] = default
-        return subprocess.run([*program, *words], cwd=sandbox / "work", env=env, stdin=subprocess.DEVNULL,
-                              capture_output=True, text=True, timeout=30, check=False)
+        allowed = timeout
+        if deadline is not None:
+            allowed = min(timeout, deadline - time.monotonic())
+            if allowed <= 0:
+                raise Exhausted
+        try:
+            return subprocess.run([*program, *words], cwd=sandbox / "work", env=env, stdin=subprocess.DEVNULL,
+                                  capture_output=True, text=True, timeout=allowed, check=False)
+        except subprocess.TimeoutExpired:
+            if allowed < timeout:
+                raise Exhausted from None
+            raise
     found: dict[tuple[str, str], list[tuple[str, list[str]]]] = collections.OrderedDict()
-    total, left_out = 0, []
+    slow = ("timeout", f"the line did not finish in {timeout:g} seconds")
+    total, left_out, incomplete = 0, [], ""
     with tempfile.TemporaryDirectory(prefix="agent-cli-lines-") as directory:
         sandbox = pathlib.Path(directory)
         for name in ("home", "work"):
             (sandbox / name).mkdir()
-        catalog = json.loads(run(["describe", "--format", "json"], sandbox).stdout)["data"]
-        for words in unknown_lines():
-            total += 1
-            for violation in unknown_violations(words, run(words, sandbox)):
-                name, detail = violation.split(": ", 1)
-                found.setdefault((name, detail), []).append(("unknown", words))
-        default = next((command for command in catalog["commands"] if command["id"] == catalog.get("defaultCommand")), None)
-        if default is not None and not opaque(default):
-            # a line that names no command runs the default command: an owner's tool, as every other line here
-            for implicit, explicit in implicit_lines(default, catalog["globalOptions"],
-                                                     lines(default, random.Random(2130), count)):
-                if flag(before_separator(implicit), "--apply") and not with_apply:
+        catalog: dict = {"commands": []}
+        try:
+            try:
+                catalog = json.loads(run(["describe", "--format", "json"], sandbox).stdout)["data"]
+            except subprocess.TimeoutExpired:
+                found.setdefault(slow, []).append(("describe", ["describe", "--format", "json"]))
+                raise Exhausted("describe did not finish, and the catalog is the campaign's source") from None
+            for words in unknown_lines():
+                try:
+                    completed = run(words, sandbox)
+                except subprocess.TimeoutExpired:
+                    found.setdefault(slow, []).append(("unknown", words))
                     continue
-                for name in ("home", "work"):
-                    shutil.rmtree(sandbox / name, ignore_errors=True)
-                    (sandbox / name).mkdir()
-                done = run(implicit, sandbox)
-                again = run(explicit, sandbox) if explicit is not None else None
                 total += 1
-                for violation in implicit_violations(default["id"], implicit, done, again):
+                for violation in unknown_violations(words, completed):
                     name, detail = violation.split(": ", 1)
-                    found.setdefault((name, detail), []).append((default["id"], implicit))
-        for default in ["text"] + (["json"] if variable else []):
-            rng = random.Random(2130)
-            for command in catalog["commands"]:
-                if opaque(command):
-                    left_out += [command["id"]] if command["id"] not in left_out else []
-                    continue
-                for words in lines(command, rng, count):
-                    if flag(before_separator(words), "--apply") and not with_apply or open_reading(words, default):
+                    found.setdefault((name, detail), []).append(("unknown", words))
+            default = next((command for command in catalog["commands"] if command["id"] == catalog.get("defaultCommand")), None)
+            if default is not None and not opaque(default):
+                # a line that names no command runs the default command: an owner's tool, as every other line here
+                for implicit, explicit in implicit_lines(default, catalog["globalOptions"],
+                                                         lines(default, random.Random(2130), count)):
+                    if flag(given(default, catalog["globalOptions"], implicit), "--apply") and not with_apply:
                         continue
-                    for name in ("home", "work"):
-                        shutil.rmtree(sandbox / name, ignore_errors=True)
-                        (sandbox / name).mkdir()
+                    # each from the same empty state: under --apply the first may write what the second would find
                     try:
-                        completed = run(words, sandbox, default)
+                        done = run(implicit, fresh(sandbox))
+                        again = run(explicit, fresh(sandbox)) if explicit is not None else None
                     except subprocess.TimeoutExpired:
-                        found.setdefault(("timeout", "the line did not finish in 30 seconds"), []).append((command["id"], words))
+                        found.setdefault(slow, []).append((default["id"], implicit))
                         continue
-                    written = sorted(str(path.relative_to(sandbox)) for path in sandbox.rglob("*") if path.is_file())
                     total += 1
-                    for violation in violations(command, catalog["globalOptions"], words, completed, written, reference,
-                                                default):
+                    for violation in implicit_violations(default["id"], implicit, done, again):
                         name, detail = violation.split(": ", 1)
-                        detail = re.sub(r"wrote \[.*?\]", "wrote files", detail) + (f" [{variable}={default}]" if default != "text" else "")
-                        found.setdefault((name, detail), []).append((command["id"], words))
+                        found.setdefault((name, detail), []).append((default["id"], implicit))
+            for default in ["text"] + (["json"] if variable else []):
+                rng = random.Random(2130)
+                for command in catalog["commands"]:
+                    if opaque(command):
+                        left_out += [command["id"]] if command["id"] not in left_out else []
+                        continue
+                    for words in lines(command, rng, count):
+                        options = given(command, catalog["globalOptions"], words)
+                        if flag(options, "--apply") and not with_apply or open_reading(options, default):
+                            continue
+                        try:
+                            completed = run(words, fresh(sandbox), default)
+                        except subprocess.TimeoutExpired:
+                            found.setdefault(slow, []).append((command["id"], words))
+                            continue
+                        written = sorted(str(path.relative_to(sandbox)) for path in sandbox.rglob("*") if path.is_file())
+                        total += 1
+                        for violation in violations(command, catalog["globalOptions"], words, completed, written, reference,
+                                                    default):
+                            name, detail = violation.split(": ", 1)
+                            detail = re.sub(r"wrote \[.*?\]", "wrote files", detail) + (f" [{variable}={default}]" if default != "text" else "")
+                            found.setdefault((name, detail), []).append((command["id"], words))
+        except Exhausted as spent:
+            incomplete = str(spent) or f"the budget of {budget:g} seconds ran out after {total} lines"
     print(f"{' '.join(argv)}: {total} lines over {len(catalog['commands']) - len(left_out)} commands"
           + (f"; not run: {', '.join(left_out)}" if left_out else "") + ("" if with_apply else "; no line with --apply"))
     for (name, detail), where in found.items():
@@ -447,8 +516,10 @@ def main(argv: list[str]) -> int:
         print(f"    {len(where)} lines, on {', '.join(commands[:6])}{' ...' if len(commands) > 6 else ''}")
         for identifier, words in sorted(where, key=lambda entry: len(entry[1]))[:3]:
             print(f"    e.g. {' '.join(words)}")
-    print("nothing found" if not found else f"{len(found)} kinds of violation")
-    return 1 if found else 0
+    if incomplete:
+        print(f"campaign incomplete: {incomplete}")
+    print(f"{len(found)} kinds of violation" if found else "nothing found in what ran" if incomplete else "nothing found")
+    return 1 if found else 3 if incomplete else 0
 
 
 if __name__ == "__main__":

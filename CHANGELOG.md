@@ -16,6 +16,30 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
 
+## Unreleased
+
+No requirement changes: the text and the kit are those of 2.16.0. The
+generated command lines (`tests/invocations.py`), a tool for a program's
+owner, judged some right answers wrong and could stop without a report.
+
+- **A word an option takes as its value is that value.** The judge looked for
+  `--help`, `--json`, `--format`, `--field`, `--apply` and `--verbose` among
+  the words of a line: `--report --help` was read as a request for help and
+  `--report --json` as one for JSON, and a right answer was found at fault.
+  It now reads the line's options as the program does.
+- **A line without its pattern and the same line with it start from the
+  same state.** Under `--apply`, the first could write what the second then
+  found.
+- **`--timeout SECONDS`** sets the time given to each run (30), and
+  **`--budget SECONDS`** bounds the campaign. A run that takes too long is
+  reported as `timeout` wherever it happens, the comparison of the default
+  command's lines and `describe` included, where it stopped the campaign.
+  A spent budget reports what was found and says the campaign incomplete,
+  with exit 3: never a pass.
+- The tool says what it judges: what it observes, the exit code, the two
+  streams and the files left where it looks; and that it reads the catalog
+  with the kit's own reader.
+
 ## 2.16.0 — 2026-10-22
 
 A program may declare a default command: the command a line that names none
