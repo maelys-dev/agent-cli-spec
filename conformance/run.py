@@ -844,6 +844,65 @@ def check_completion_scripts(report: Report, program: Program, catalog: dict, co
 SECTION_6 = {"help", "version", "describe", "completion", "complete.candidates", "completion.install"}
 
 
+def shows_words(text: str, words: list[str]) -> bool:
+    """Whether the words of an example appear in a text in their order; a word a shell would quote is left out,
+    its spelling being the program's choice."""
+    place = 0
+    for word in words:
+        if not re.fullmatch(r"[A-Za-z0-9_./:=@+,%-]+", word):
+            continue
+        place = text.find(word, place)
+        if place < 0:
+            return False
+        place += len(word)
+    return True
+
+
+def check_help_words(report: Report, program: Program, commands: list[dict]) -> None:
+    """Section 6: what `help` answers for a word. An identifier is its command; a prefix of commands a human is
+    shown is their family; any other word fails with INVALID_COMMAND, a topic of the program's own included.
+    Section 2: `help COMMAND_ID` shows the command's examples."""
+    identifiers = [command["id"] for command in commands]
+    shown = [command["id"] for command in commands if not command.get("hidden")]
+    prefixes = [identifier.rsplit(".", 1)[0] for identifier in shown if "." in identifier]
+    prefixes = [prefix for index, prefix in enumerate(prefixes) if prefix not in identifiers and prefix not in prefixes[:index]]
+    if prefixes:
+        prefix = prefixes[0]
+        family = [identifier for identifier in shown if identifier.startswith(prefix + ".")]
+        answer = program.run("help", prefix, "--format", "json", "--non-interactive")
+        body = envelope(report, f"help {prefix} envelope", answer, expect_ok=True)
+        if body is not None:
+            report.add(f"help {prefix} lists the commands of the family {prefix}, in catalog order",
+                       body["data"].get("commands") == family, f"commands {str(body['data'].get('commands'))[:160]}")
+        begun = prefix[:-1]
+        if begun and begun not in identifiers and not any(identifier.startswith(begun + ".") for identifier in identifiers):
+            check_failure(report, f"help {begun}, a string that only begins a family, fails with INVALID_COMMAND",
+                          program.run("help", begun, "--json"), "INVALID_COMMAND")
+    else:
+        report.skip("help of a family", "no command of several segments has a prefix that is not itself a command")
+    concealed = [identifier.rsplit(".", 1)[0] for identifier in identifiers if "." in identifier
+                 and identifier not in shown]
+    concealed = [prefix for prefix in concealed if prefix not in identifiers
+                 and not any(identifier.startswith(prefix + ".") for identifier in shown)]
+    if concealed:
+        check_failure(report, f"help {concealed[0]}, a family of hidden commands only, fails with INVALID_COMMAND",
+                      program.run("help", concealed[0], "--json"), "INVALID_COMMAND")
+    if "conventions" not in identifiers and not any(identifier.startswith("conventions.") for identifier in identifiers):
+        check_failure(report, "help of a word that names no command, conventions, fails with INVALID_COMMAND",
+                      program.run("help", "conventions", "--json"), "INVALID_COMMAND")
+    exemplified = [command for command in commands if command.get("examples") and not command.get("hidden")][:3]
+    if not exemplified:
+        report.skip("help COMMAND_ID shows the examples", "no command declares examples")
+    for command in exemplified:
+        answer = program.run("help", command["id"], "--format", "json", "--non-interactive")
+        body = envelope(report, f"{command['id']}: help envelope", answer, expect_ok=True)
+        if body is not None:
+            text = str(body["data"].get("text", ""))
+            missing = [" ".join(example["words"]) for example in command["examples"]
+                       if not shows_words(text, example["words"])]
+            report.add(f"{command['id']}: help shows its examples", not missing, f"not shown: {missing[:2]}")
+
+
 def check_default_command(report: Report, program: Program, catalog: dict, by_id: dict, honours_help: bool) -> None:
     """Sections 1 and 8: what a catalog may name as its default command, and how a line that names no command is
     read. The kit never runs the default command of a program: every line it sends carries `--help`, and only to
@@ -1387,6 +1446,10 @@ def _run_kit(program: Program, report: Report) -> Report:
         hidden = {command["id"] for command in named if command.get("hidden") is True}
         strangers = [item for item in listed if item not in every or item in hidden]
         report.add("help lists identifiers of the catalog, none of them hidden", not strangers, f"listed {strangers[:6]}")
+        text = str(data.get("text", ""))
+        told = [" ".join(command["pattern"]) for command in named if command.get("hidden") is True and command["pattern"]
+                and re.search(r"(?<![\w-])" + re.escape(" ".join(command["pattern"])) + r"(?![\w-])", text)]
+        report.add("the text of the general help names no hidden command", not told, f"names {told[:4]}")
         about = program.run("help", "version", "--format", "json", "--non-interactive")
         about_body = envelope(report, "help version envelope", about, expect_ok=True)
         if about_body is not None:
@@ -1446,6 +1509,7 @@ def _run_kit(program: Program, report: Report) -> Report:
                   program.run("help", "--version", "--json"), "VALIDATION_FAILED")
     check_failure(report, "help of an unknown identifier fails with INVALID_COMMAND",
                   program.run("help", "kit-no-such-command", "--json"), "INVALID_COMMAND")
+    check_help_words(report, program, commands)
     check_failure(report, "an option the command does not have fails before --help and names the command",
                   program.run("version", "--kit-no-such-option", "--help", "--json"), "VALIDATION_FAILED")
     incomplete = program.run("completion", "--help", "--format", "json", "--non-interactive")
@@ -1554,6 +1618,14 @@ def _run_kit(program: Program, report: Report) -> Report:
             if identifier in words:
                 unexpected.append(identifier)
         report.add(f"__complete after {built_in} offers the command identifiers", not missing, f"missing {missing}")
+        answer = program.run("__complete", "--format", "json", "--non-interactive", "--", built_in, "")
+        try:
+            words = {str(record.get("word")) for record in parse_json(answer.stdout)["data"]["records"]}
+        except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
+            words = set()
+        # every listed identifier, a descriptor left out for its schema included: what is judged here is a family
+        others = sorted(word for word in words if not word.startswith("-") and word not in every)
+        report.add(f"__complete after {built_in} offers identifiers only, no family", not others, f"offered {others[:6]}")
         report.add(f"__complete after {built_in} offers no hidden or unavailable identifier", not unexpected,
                    f"offered {unexpected}")
     check_completion_scripts(report, program, catalog, commands, scripts)

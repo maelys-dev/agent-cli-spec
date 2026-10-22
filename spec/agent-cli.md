@@ -126,7 +126,7 @@ an invocation from `input`, never from help text.
 | --- | --- |
 | `id` | stable identifier, unique in the catalog: segments of lower-case letters, digits and hyphens separated by single dots, the first starting with a letter, `^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)*$`. `unknown` is reserved: it is what an envelope names when no command was resolved |
 | `pattern` | the words that select the command, in order |
-| `usage` | the human synopsis; MUST equal `input.synopsis` |
+| `usage` | the synopsis; MUST equal `input.synopsis` |
 | `purpose` | one sentence |
 | `effect` | `read`, `execute` or `stream` (section 4), or `{"plan": "preview", "apply": "apply"}` / `{"plan": "preview", "apply": "commit"}` for a transaction |
 | `outputMode` | `json-envelope`, `json-records` or `protocol-stream` |
@@ -215,7 +215,7 @@ refuses it as it refuses any other. After the pattern of a delegate or of a
 `passthrough` command the words are not the catalog's to check.
 
 Nothing runs an example: a program validates its examples by parsing them,
-and the conformance kit by reading the catalog. `help COMMAND_ID` SHOULD show
+and the conformance kit by reading the catalog. `help COMMAND_ID` MUST show
 them. Examples exist in READMEs and drift there; a declared one cannot name
 an option the command has lost. The member is optional; the catalog and the
 command form carry it, the summary does not (section 1).
@@ -479,11 +479,24 @@ rendering alone, a failure carrying no `data`. On a `json-records` command
 ### `help` and `version`
 
 `--help` and `--version` are `help` and `version` spelled as options: as the
-first word of the line each selects its command. `help` of an identifier the
-catalog does not have fails with `INVALID_COMMAND`, as `describe` does.
+first word of the line each selects its command.
 `--version` has no other place: after a command it is an option that command
 does not declare, and the line fails with `VALIDATION_FAILED` like any other
 such line, so that a program asked its version never runs something else.
+
+`help` of a word that is no identifier of the catalog but a prefix of some,
+in the sense of `describe --summary --prefix` (section 1), gives the help of
+that family: the commands whose identifier starts with that word and a dot,
+hidden ones left out, in catalog order: `help note` lists `note.write` and
+the other commands of `note`. A word that is an identifier gives that
+command's help even when it is also a prefix. Any other word fails with
+`INVALID_COMMAND`, as `describe` does: a word that is neither an identifier
+nor the prefix of a command a human is shown, a string that only begins one
+(`help no`), and a word of no command at all. `help` has no other subject: a
+program offers no topic of its own under `help`, whose operand names commands
+and only commands, so that a word a product may choose for a command tomorrow
+answers the same today. A program pinned to an earlier tag of this contract
+answers a prefix with `INVALID_COMMAND`.
 
 `--help` after the words of a command gives the help of that command, as
 `help COMMAND_ID` does, and the command does not run, whatever else the line
@@ -507,11 +520,11 @@ and 9).
 
 In the data of `help`, `commands` lists the identifiers of the commands the
 text shows: every command it lists for `help`, the one asked for `help
-COMMAND_ID` and for `--help` after a command. An agent goes from a help to
-`describe COMMAND_ID` without reading `text`, and since the envelope names
+COMMAND_ID` and for `--help` after a command, the commands of the family for
+`help PREFIX`. An agent goes from a help to `describe COMMAND_ID` without reading `text`, and since the envelope names
 `help`, `commands` is where the answer says which command it is about. The
-general help never lists a hidden command; asked by its identifier, a hidden
-command is the one `commands` names, as `describe COMMAND_ID` answers for it:
+general help never lists a hidden command, in its text or in `commands`;
+asked by its identifier, a hidden command is the one `commands` names, as `describe COMMAND_ID` answers for it:
 answering who names it is not offering it.
 
 ### Completion
@@ -539,8 +552,8 @@ Candidates come from the catalog: command
 words, that is the first word of each command and, after the first words of
 a command of several, its next word (`write` after `note`); options not yet
 given with hidden options excluded; choices; command identifiers after
-`help` and `describe`. A hidden or an unavailable command
-is never offered, as a word or as an identifier: `describe` still answers
+`help` and `describe`, and identifiers only: a family is typed, its commands
+are offered. A hidden or an unavailable command is never offered, as a word or as an identifier: `describe` still answers
 for it, completion does not propose it. Whether options are offered before a
 `-` is typed is the implementation's choice, and a script follows its own
 `__complete` either way.

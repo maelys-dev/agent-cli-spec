@@ -487,6 +487,8 @@ def candidate_words(item):
     if item["id"] in ("help", "describe"):
         words |= {entry["id"] for entry in CATALOG
                   if not entry["hidden"] and (entry["available"] or BREAK == "identifier-unavailable")}
+        if item["id"] == "help" and BREAK == "complete-help-family":
+            words |= {entry["id"].split(".")[0] for entry in CATALOG if "." in entry["id"] and not entry["hidden"]}
     return words
 
 
@@ -902,18 +904,30 @@ def main(argv):
             pattern = " ".join(next(item for item in CATALOG if item["id"] == DEFAULT)["pattern"])
             text += (f"default command: {DEFAULT}, run as `{PROGRAM} [OPTIONS] [-- OPERANDS]` or `{PROGRAM} {pattern} ...`;"
                      " a line that starts with an option is its\n")
-        if operands and operands[0] not in by_id and BREAK != "help-unknown-general":
+        if BREAK == "help-general-hidden-text" and not operands:
+            text += "".join(f"  {' '.join(item['pattern'])}\n" for item in CATALOG if item["hidden"])
+        # Section 6: a word that is no identifier but a prefix of commands a human is shown is their family.
+        family = [item["id"] for item in CATALOG if operands and operands[0] not in by_id
+                  and item["id"].startswith(operands[0] + ".") and (not item["hidden"] or BREAK == "help-prefix-hidden")]
+        topic = BREAK == "help-topic" and operands[:1] == ["conventions"]
+        if BREAK == "help-prefix-refused" or (BREAK == "help-prefix-loose" and operands and operands[0] not in by_id):
+            family = [item["id"] for item in CATALOG if operands and operands[0] not in by_id and not item["hidden"]
+                      and item["id"].startswith(operands[0])] if BREAK == "help-prefix-loose" else []
+        if operands and operands[0] not in by_id and not family and not topic and BREAK != "help-unknown-general":
             return fail("help", "INVALID_COMMAND", f"Unknown command identifier {operands[0]!r}.", fmt, compact)
+        if family:
+            text = "".join(f"{by_id[identifier]['usage']}\n" for identifier in family)
         if operands and operands[0] in by_id:
             target = by_id[operands[0]]
             text = target["usage"] + "\n" + "".join(f"  {item['long']}  {item['summary']}\n"
                                                  for item in target["input"]["options"] if offered(item))
-            text += "".join(f"  {PROGRAM} {' '.join(shlex.quote(word) for word in example['words'])}  {example['summary']}\n"
-                            for example in target.get("examples", []))
-        # Section 6: `commands` names what the text shows, the one command asked or every listed one.
+            if BREAK != "help-examples-missing":
+                text += "".join(f"  {PROGRAM} {' '.join(shlex.quote(word) for word in example['words'])}  "
+                                f"{example['summary']}\n" for example in target.get("examples", []))
+        # Section 6: `commands` names what the text shows, the one command asked, a family or every listed one.
         one = operands[:1] if operands and operands[0] in by_id and BREAK != "help-lists-all" else None
-        data = {"text": text, "commands": one or [item["id"] for item in CATALOG
-                                                  if not item["hidden"] or BREAK == "help-lists-hidden"]}
+        data = {"text": text, "commands": one or family or ([] if topic else [
+            item["id"] for item in CATALOG if not item["hidden"] or BREAK == "help-lists-hidden"])}
     elif identifier == "describe":
         data = {"schemaVersion": 1, "program": PROGRAM, "product": "Conformant", "version": "1.0.0",
                 "contract": "agent-cli/v2", "cliApi": 1, "framework": "fixture"}
