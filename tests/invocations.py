@@ -456,6 +456,8 @@ def main(argv: list[str]) -> int:
             except subprocess.TimeoutExpired:
                 found.setdefault(slow, []).append(("describe", ["describe", "--format", "json"]))
                 raise Exhausted("describe did not finish, and the catalog is the campaign's source") from None
+            # known before anything runs, so that a campaign cut short counts and names them as a whole one does
+            left_out = [command["id"] for command in catalog["commands"] if opaque(command)]
             for words in unknown_lines():
                 try:
                     completed = run(words, sandbox)
@@ -488,7 +490,6 @@ def main(argv: list[str]) -> int:
                 rng = random.Random(2130)
                 for command in catalog["commands"]:
                     if opaque(command):
-                        left_out += [command["id"]] if command["id"] not in left_out else []
                         continue
                     for words in lines(command, rng, count):
                         options = given(command, catalog["globalOptions"], words)

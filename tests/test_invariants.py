@@ -105,6 +105,8 @@ class GeneratedInvocationsTest(unittest.TestCase):
             code = invocations.main(["--budget", "1", "--timeout", "5", sys.executable, str(FIXTURE)])
         self.assertEqual(code, 3, printed.getvalue())
         self.assertIn("campaign incomplete: the budget of 1 seconds ran out after", printed.getvalue())
+        # the commands never run are counted and named as in a whole campaign
+        self.assertIn("; not run: serve, tool", printed.getvalue().splitlines()[0])
         self.assertTrue(printed.getvalue().endswith("nothing found in what ran\n"), printed.getvalue())
 
     def test_a_bare_word_is_never_put_where_it_is_a_value(self):
