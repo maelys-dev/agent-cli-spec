@@ -16,7 +16,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
 
-## Unreleased
+## 2.16.0 — 2026-10-22
 
 A program may declare a default command: the command a line that names none
 runs. Asked for an application whose bare name opens its main view. Nothing
