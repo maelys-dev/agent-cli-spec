@@ -900,7 +900,8 @@ def main(argv):
         text = "usage\n"
         if DEFAULT and not operands:
             pattern = " ".join(next(item for item in CATALOG if item["id"] == DEFAULT)["pattern"])
-            text += f"default command: {DEFAULT}, run as `{PROGRAM} [OPTIONS] [-- OPERANDS]` or `{PROGRAM} {pattern} ...`\n"
+            text += (f"default command: {DEFAULT}, run as `{PROGRAM} [OPTIONS] [-- OPERANDS]` or `{PROGRAM} {pattern} ...`;"
+                     " a line that starts with an option is its\n")
         if operands and operands[0] not in by_id and BREAK != "help-unknown-general":
             return fail("help", "INVALID_COMMAND", f"Unknown command identifier {operands[0]!r}.", fmt, compact)
         if operands and operands[0] in by_id:

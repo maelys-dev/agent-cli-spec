@@ -154,6 +154,47 @@ class WithADefaultTest(unittest.TestCase):
                 self.assertEqual(validate(data, SCHEMAS["describe"]), [])
 
 
+class MigrationTest(unittest.TestCase):
+    def test_the_same_program_before_and_after_it_declares_a_default(self):
+        """What declaring a default changes, line by line: the answer and what ran, before and after. A line that
+        ran can stop (`--json version`); a refusal can become a run; what names a command stays as it was."""
+        refused, ran_version = (1, "INVALID_COMMAND", "unknown"), ((0, None, "version"), ["version"])
+        for default, words, before, after in (
+                ("limits", ["--json"], (refused, []), ((1, "VALIDATION_FAILED", "limits"), [])),
+                ("limits", ["--json", "version"], ran_version, ((1, "VALIDATION_FAILED", "limits"), [])),
+                ("limits", ["version", "--json"], ran_version, ran_version),
+                ("limits", [DIGEST, "--name", "version", "--json", "--", "near"], (refused, []),
+                 ((0, None, "limits"), ["limits"])),
+                ("limits", ["lst", "--json"], (refused, []), (refused, [])),
+                ("limits", ["--version"], ((0, None, None), ["version"]), ((0, None, None), ["version"])),
+                ("limits", ["--help"], ((0, None, None), ["help"]), ((0, None, None), ["help"])),
+                ("limits", [DIGEST, "--help"], ((1, None, None), []), ((0, None, None), ["help"])),
+                ("limits", ["-h", "--json"], (refused, []), ((1, "VALIDATION_FAILED", "limits"), [])),
+                ("limits", ["-x", "--json"], (refused, []), ((1, "VALIDATION_FAILED", "limits"), [])),
+                ("limits", [DIGEST, "--json", "--", "near"], (refused, []), ((0, None, "limits"), ["limits"])),
+                ("serve", ["--json"], (refused, []), ((1, "VALIDATION_FAILED", "serve"), [])),
+                ("note.write", ["--", "notes/today.txt"], ((1, None, None), []), ((0, None, None), ["note.write"]))):
+            for declared, expected in (("", before), (default, after)):
+                program = FixtureProgram(default=declared)
+                with self.subTest(default=declared, words=words):
+                    journal = Journal(program)
+                    try:
+                        done, ran = journal.run(*words)
+                    finally:
+                        journal.close()
+                    self.assertEqual((answer(done), [entry["command"] for entry in ran]), expected)
+        # an empty line: refused before, the default's own refusal after, its missing operand; nothing ran either way
+        for program in (FixtureProgram(), FixtureProgram(default="limits")):
+            journal = Journal(program)
+            try:
+                done, ran = journal.run()
+            finally:
+                journal.close()
+            self.assertEqual((done.returncode, ran), (1, []))
+        self.assertIn("a line that starts with an option is its",
+                      FixtureProgram(default="limits").run("--help").stdout)
+
+
 class WhatMayBeTheDefaultTest(unittest.TestCase):
     def test_a_catalog_that_declares_another_is_refused_before_anything_runs(self):
         """Proof 8: a command that does not exist, cannot run, is hidden, belongs to section 6, is a delegate, or

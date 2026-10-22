@@ -45,7 +45,13 @@ changes for a program that declares none.
   `-h` included, selects the default and fails at step 2 in its name. The
   selected command is the default in every respect: validation, help,
   effect, envelope. A line that selects it and the same line after its
-  pattern give the same answer.
+  pattern give the same answer, and a refusal or a failure of the default
+  makes the program try no other command.
+- **Declaring a default can stop a line that ran**: `PROGRAM --json list`
+  selects the default and is refused; `PROGRAM list --json` runs `list`.
+  Without a default, an empty line and a line that starts with an option
+  are read as before; this version does not settle how, and implementations
+  differ there.
 - **The kit never runs a program's default command.** It checks the
   declaration and its presence in every form, then, and only for a program
   that has shown it honours `--help` after a command, lines that carry

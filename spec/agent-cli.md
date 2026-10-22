@@ -717,14 +717,21 @@ validation, its help (`PROGRAM --label VALUE --help` gives the help of the
 default command and runs nothing), its effect, a transaction planning
 without `--apply` and a stream keeping its stdout, and its envelope, which
 names it. A line that selects the default command and the same line written
-after its pattern give the same answer. `help` SHOULD say which command is
-the default and show it invoked both ways. `__complete` reads its words as
+after its pattern give the same answer. A refusal or a failure of the
+default command is its own: the program tries no other command, before the
+handler or after it. `help` SHOULD say which command is the default, that a
+line starting with an option other than `--help` and `--version` is its, and
+show it invoked both ways. `__complete` reads its words as
 the line would be read: after a first option they are completed as the
 default command's, and at the root a word that starts with `-` is completed
 with the options of the default command among the candidates.
 
-In a program that declares no default command none of this applies: a line
-that starts with an option is read as it was.
+Declaring a default command can stop a line that ran: `PROGRAM --json list`
+selects the default command and is refused, `PROGRAM list --json` is the
+form that runs `list`. In a program that declares no default command none of
+this applies. How it reads an empty line, or a line that starts with an
+option other than `--help` and `--version`, is as it was: this version does
+not settle it.
 
 ### Error codes
 
