@@ -168,9 +168,10 @@ def implicit_lines(command: dict, global_options: list[dict], explicit: list[lis
             continue
         seen.add(tuple(implicit))
         pairs.append((implicit, pattern + implicit))
-        if options:
-            # a bare word right after the first option, or after its value when it takes one
-            place = 2 if options[0] in valued and len(options) > 1 else 1
+        if options and not (options[0] in valued and len(options) == 1):
+            # a bare word right after the first option, or after its value when it takes one; a first option
+            # whose value is missing would take the word for it, and the line would be right
+            place = 2 if options[0] in valued else 1
             pairs.append((options[:place] + ["kit-bare-word"] + options[place:] + implicit[len(options):], None))
     return pairs
 

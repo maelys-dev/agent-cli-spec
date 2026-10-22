@@ -79,6 +79,16 @@ class GeneratedInvocationsTest(unittest.TestCase):
                     and invocations.implicit_violations("limits", implicit, broken.run(*implicit), None)]
         self.assertTrue(absorbed, "the defect that takes a bare word for an operand is not seen")
 
+    def test_a_bare_word_is_never_put_where_it_is_a_value(self):
+        """`PROGRAM --label kit-bare-word` gives --label its value: the line is right, and is not one to refuse."""
+        command = {"pattern": ["show"], "input": {"options": [{"long": "--label", "argument": {"kind": "string"}},
+                                                             {"long": "--all"}]}}
+        bare = {tuple(words): None for words, explicit in invocations.implicit_lines(
+            command, [], [["show", "--label"], ["show", "--label", "x", "--all"], ["show", "--all", "--label", "y"]])
+            if explicit is None}
+        self.assertEqual(list(bare), [("--label", "x", "kit-bare-word", "--all"),
+                                      ("--all", "kit-bare-word", "--label", "y")])
+
     def test_the_fixture_does_what_the_contract_says_of_every_generated_line(self):
         """Some nine hundred lines built from the fixture's own catalog. Two defects of the fixture were found by
         accident before this existed: it wrote before it refused --field, and it ran a command under --help."""
