@@ -265,7 +265,7 @@ def failure_code(stderr: str) -> str | None:
             return json.loads(stderr)["error"]["code"]
         except (ValueError, KeyError, TypeError):
             return None
-    match = re.search(r"\[([A-Z_]+)\]", stderr)
+    match = re.search(r"\[([A-Z][A-Z0-9_]*)\]", stderr)
     return match.group(1) if match else None
 
 
@@ -326,8 +326,12 @@ def violations(command: dict, global_options: list[dict], words: list[str], comp
         named = "help" if asks and not alone else command["id"]
         if body.get("command") != named:
             found.append(f"envelope-command: names {body.get('command')!r}, not {named!r}")
-        if code == 1 and body.get("error", {}).get("code") not in CODES:
-            found.append(f"error-code: {body.get('error', {}).get('code')!r} is not a code of section 8")
+        # section 8: a product MAY add codes of its own domain, well formed; the reference program adds none
+        given_code = body.get("error", {}).get("code")
+        if code == 1 and reference and given_code not in CODES:
+            found.append(f"error-code: {given_code!r} is not a code of section 8, which the reference program keeps to")
+        elif code == 1 and not re.fullmatch(r"[A-Z][A-Z0-9_]*", str(given_code)):
+            found.append(f"error-code: {given_code!r} is not a well-formed code")
     fields = [value for name, value in options if name == "--field"]
     records = command["outputMode"] == "json-records" or bool(fields)
     if reference and code != 1 and out == "" and not records:

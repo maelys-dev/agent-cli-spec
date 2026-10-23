@@ -12,7 +12,12 @@ Any object of a `describe` document MAY carry members whose name starts with
 `x-`: the catalog, a descriptor, its `input`, an operand, an option, an
 argument, a constraint, a transaction effect, the filter of a filtered
 summary. The list is the objects the schemas define, and nothing else in a
-document is an object. The conformance
+document is an object. The `error` object of a failure envelope MAY carry
+them too (`schemas/envelope.json`): a detail a machine reads, an identifier,
+an expected value, the revisions seen and current, a delay before a retry,
+that is neither a schema issue (`issues`) nor prose (`message`, `hint`). Such
+a member travels in JSON that agents log: it carries no secret, environment
+or file content a failure does not need. The conformance
 kit accepts them and checks nothing about their content; the product's
 documentation defines them. A member without the prefix that the contract
 does not define is a conformance failure.
@@ -36,6 +41,11 @@ and `count`/`records` for `json-records` commands.
 A product MAY add error codes for boundaries of its own domain. It MUST
 document them and MUST NOT reuse a listed code for another meaning. A
 generic agent treats an unknown code as a failure it cannot retry blindly.
+A product SHOULD therefore keep the listed code when its boundary is one of
+the list, a configuration key it does not know being `VALIDATION_FAILED`
+and a machine it does not know `NOT_FOUND`, and carry the cause of its own in
+`error.issues` or an `x-` member of `error`. A detail that only restates the
+code in front says that code is the wrong one.
 
 ## Effects and output modes
 

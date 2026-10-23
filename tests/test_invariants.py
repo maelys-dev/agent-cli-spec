@@ -7,6 +7,7 @@ import json
 import pathlib
 import random
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -108,6 +109,23 @@ class GeneratedInvocationsTest(unittest.TestCase):
         # the commands never run are counted and named as in a whole campaign
         self.assertIn("; not run: serve, tool", printed.getvalue().splitlines()[0])
         self.assertTrue(printed.getvalue().endswith("nothing found in what ran\n"), printed.getvalue())
+
+    def test_a_code_of_the_product_own_domain_is_no_violation(self):
+        """Section 8: a product MAY add codes of its own domain. Only the reference program, which adds none, is
+        held to the list; a code that is not well formed is a violation for any program."""
+        program = FixtureProgram()
+        catalog = json.loads(program.run("describe", "--json").stdout)["data"]
+        command = next(entry for entry in catalog["commands"] if entry["id"] == "limits")
+        words = ["limits", "near", "--sum=" + "ab" * 32, "--json"]
+        for code, issued, reference in (("PANES_CONFIG", [], False), ("PANES_CONFIG", ["error-code"], True),
+                                        ("NOT_FOUND", [], True), ("panes-config", ["error-code"], False)):
+            with self.subTest(code=code, reference=reference):
+                envelope = {"schemaVersion": 2, "contract": "agent-cli/v2", "command": "limits", "ok": False,
+                            "exitCode": 1, "error": {"code": code, "message": "Unknown key.", "x-cx-line": 12}}
+                done = subprocess.CompletedProcess(words, 1, "", json.dumps(envelope))
+                found = [violation.split(": ", 1)[0] for violation in
+                         invocations.violations(command, catalog["globalOptions"], words, done, [], reference)]
+                self.assertEqual(found, issued)
 
     def test_a_bare_word_is_never_put_where_it_is_a_value(self):
         """`PROGRAM --label kit-bare-word` gives --label its value: the line is right, and is not one to refuse."""
