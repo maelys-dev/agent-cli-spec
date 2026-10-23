@@ -232,6 +232,26 @@ def envelope(command_id, ok, exit_code, payload, compact):
     return json.dumps(body, indent=None if compact else 2, separators=(",", ":") if compact else None) + "\n"
 
 
+def colors(option, stream):
+    """Section 5: whether a text rendering is colored, decided by the first of the line's --color, CLICOLOR_FORCE,
+    NO_COLOR and TERM=dumb that applies, and otherwise by the stream being a terminal."""
+    force = os.environ.get("CLICOLOR_FORCE", "") not in ("", "0")
+    plain = os.environ.get("NO_COLOR", "") != ""
+    if BREAK == "color-no-color-first" and plain:
+        return False
+    if BREAK == "color-force-first" and force:
+        return True
+    if option in ("always", "never"):
+        return option == "always"
+    if BREAK == "color-no-color-over-force" and plain:
+        return False
+    if force:
+        return True
+    if plain or os.environ.get("TERM") == "dumb":
+        return False
+    return stream.isatty()
+
+
 def fail(command_id, code, message, fmt, compact, hint="read describe."):
     if BREAK == "code-drift" and code == "INVALID_COMMAND":
         code = "INVALID_PATH"
@@ -928,6 +948,10 @@ def main(argv):
         one = operands[:1] if operands and operands[0] in by_id and BREAK != "help-lists-all" else None
         data = {"text": text, "commands": one or family or ([] if topic else [
             item["id"] for item in CATALOG if not item["hidden"] or BREAK == "help-lists-hidden"])}
+        if colors(options.get("--color", "auto"), sys.stdout):
+            text = text.replace("usage", "\x1b[1musage\x1b[0m", 1)
+            if BREAK == "color-json":
+                data["text"] = text
     elif identifier == "describe":
         data = {"schemaVersion": 1, "program": PROGRAM, "product": "Conformant", "version": "1.0.0",
                 "contract": "agent-cli/v2", "cliApi": 1, "framework": "fixture"}
