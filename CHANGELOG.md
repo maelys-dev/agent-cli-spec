@@ -18,6 +18,28 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
 
+## Unreleased
+
+No program fails from this version: a recommendation, the text catching up
+with the schema, and the generated lines corrected. A product had answered
+its own configuration errors with codes of its own, and the generated lines
+called that a violation, which the text permits.
+
+- **A listed code where the boundary is listed** (section 8,
+  `spec/extensions.md`). A product MAY still add codes of its own domain. A
+  generic agent reads the code to decide its next step, and an unknown one
+  only tells it to stop, so a product SHOULD keep the listed code when its
+  boundary is one of the list, an unknown configuration key being
+  `VALIDATION_FAILED` and an unknown machine `NOT_FOUND`, and carry its own
+  cause beside it, in `error.issues` or an `x-` member. A code of its own is
+  for a boundary the list does not name (`REVISION_CONFLICT`).
+- **`x-` members in `error`**, which `schemas/envelope.json` already admitted
+  and the text did not say: a detail a machine reads, neither a schema issue
+  nor prose, and nothing a failure does not need, since agents log it.
+- **The generated lines** (`tests/invocations.py`) hold a program to the
+  eleven listed codes only under `--reference`, the reference program adding
+  none; any other program is held to a well-formed code.
+
 ## 2.18.0 — 2026-10-23
 
 Colors in an order. The text named `--color`, `NO_COLOR` and `TERM=dumb`

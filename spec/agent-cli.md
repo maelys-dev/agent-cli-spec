@@ -784,7 +784,13 @@ not settle it.
 
 A product MAY add codes for boundaries of its own domain
 (`REVISION_CONFLICT` in Hermes); it MUST document them and MUST NOT reuse a
-listed code for another meaning.
+listed code for another meaning. A code is what a generic agent reads to
+decide its next step, and an unknown one only tells it to stop: a product
+SHOULD keep the listed code when its boundary is one of the list and carry
+the cause of its own beside it, in `error.issues` (`{"code": "PANES_CONFIG",
+"path": "panes.conf", "message": ...}`) or in a member named `x-`, which the
+`error` object admits ([extensions](extensions.md)). A code of its own is for
+a boundary the list does not name.
 
 ## 9. Protocol streams and delegates
 
