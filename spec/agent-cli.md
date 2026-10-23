@@ -335,7 +335,7 @@ Every program accepts, on every command:
 | `--compact` | JSON on a single line |
 | `--pretty` | JSON indented, the setting `--compact` sets the other way; `--pretty=false` selects compact JSON |
 | `--non-interactive` | never prompt; fail with `VALIDATION_FAILED` instead of asking |
-| `--color auto\|always\|never` | ANSI colors on terminals (default `auto`) |
+| `--color auto\|always\|never` | ANSI colors of the text rendering, decided as "Colors" below says (default `auto`) |
 | `--progress auto\|always\|never` | progress of a long run on stderr, in text mode, when stderr is a terminal (default `auto`) |
 | `--verbose` | details of the run on stderr, in text mode only (default silent) |
 | `--pager auto\|always\|never` | pager for the text rendering when stdout is a terminal (default `auto`) |
@@ -374,6 +374,27 @@ causes, `--field` against a default of `json` for one, is a rendering
 constraint of section 8 and is reported then, never after the command has
 run.
 
+### Colors: `--color`
+
+A program MAY color its text rendering, its progress and details, and the
+text of its failures. Whether a stream is colored is decided before the
+command runs, by the first of these that applies:
+
+1. `--color always` or `--color never` on the line;
+2. `CLICOLOR_FORCE` set to a value other than empty and `0`, which a program
+   MAY honor: colors, a pipe included;
+3. `NO_COLOR` set to a value other than empty: no colors;
+4. `TERM=dumb`: no colors;
+5. otherwise, `--color auto`: colors when the stream is a terminal.
+
+A request comes before a preference: whoever writes `--color always` or sets
+`CLICOLOR_FORCE` asks for colors now, for a pager that reads them or a log
+that keeps them, and `NO_COLOR` is a standing preference that an explicit
+request overrides, as its own convention intends. Nothing in JSON is ever
+colored: an envelope, a `jsonl` record and the `text` of the data of `help`
+stay plain whatever decides, so that an agent never reads an escape
+sequence. A program that colors nothing has nothing to decide.
+
 ### Progress and details: `--progress`, `--verbose`
 
 Progress and details follow the example of git's progress and of `--color
@@ -392,7 +413,7 @@ envelope stays alone on its stream. A program that has nothing to show
 accepts both and produces nothing more, never an error. A progress or detail
 line is never an envelope and never starts with `PROGRAM: [`, the rendering
 of a failure; both are colored under the same rule as that rendering
-(`--color`, `NO_COLOR`, `TERM=dumb`).
+("Colors" above).
 
 One spelling across products, as for `--apply`: a product
 MUST NOT declare another option for the same intents; a finer diagnostic
@@ -626,8 +647,7 @@ result. `--field` of section 5 applies these rules to one member of `data`. Text
 empty string both render as an empty field).
 
 Text rendering of a failure is `PROGRAM: [CODE] message` on stderr, followed
-by `Hint: ...` when present, colored on a terminal unless `--color never`,
-`NO_COLOR` or `TERM=dumb` applies.
+by `Hint: ...` when present, colored as section 5 decides ("Colors").
 
 The format selects the rendering, never the stream. In text mode as in JSON,
 the rendering of a success goes to stdout and the rendering of a failure to

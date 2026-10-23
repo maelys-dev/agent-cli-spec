@@ -858,6 +858,38 @@ def shows_words(text: str, words: list[str]) -> bool:
     return True
 
 
+def check_colors(report: Report, program: Program) -> None:
+    """Section 5, Colors: --color on the line, then CLICOLOR_FORCE, then NO_COLOR, then TERM=dumb; nothing in JSON
+    is colored. A program may color nothing: what is checked is an order, read from what the program does."""
+    escape = "\x1b["
+    unset = {"NO_COLOR": "", "CLICOLOR_FORCE": "", "TERM": "xterm-256color"}
+    forced = {**unset, "CLICOLOR_FORCE": "1"}
+    painted = []
+    for words in (("version", "--json"), ("help", "--json"), ("kit-no-such-command", "--json")):
+        answer = program.run(*words, "--color", "always", env=forced)
+        # an escape written raw, or inside a JSON string, where it reads \u001b
+        if any(mark in answer.stdout + answer.stderr for mark in (escape, "\\u001b[", "\\u001B[")):
+            painted.append(" ".join(words))
+    report.add("nothing in JSON is colored, under --color always and CLICOLOR_FORCE", not painted, f"colored: {painted}")
+    never = [program.run(*words, "--color", "never", env={**forced, "NO_COLOR": ""})
+             for words in (("help",), ("kit-no-such-command",))]
+    report.add("--color never leaves the text plain, CLICOLOR_FORCE set",
+               all(escape not in answer.stdout + answer.stderr for answer in never),
+               f"stdout {never[0].stdout[:40]!r}")
+    always = program.run("help", "--color", "always", env=unset)
+    report.add("--color always is not undone by NO_COLOR or TERM=dumb",
+               program.run("help", "--color", "always", env={**unset, "NO_COLOR": "1", "TERM": "dumb"}).stdout
+               == always.stdout, f"--color always alone: {always.stdout[:40]!r}")
+    plain = program.run("help", env=unset)
+    force = program.run("help", env=forced)
+    if force.stdout == plain.stdout:
+        report.skip("CLICOLOR_FORCE comes before NO_COLOR and TERM=dumb", "the program does not honor CLICOLOR_FORCE, which it MAY")
+    else:
+        both = program.run("help", env={**forced, "NO_COLOR": "1", "TERM": "dumb"})
+        report.add("CLICOLOR_FORCE comes before NO_COLOR and TERM=dumb", both.stdout == force.stdout,
+                   f"with NO_COLOR and TERM=dumb: {both.stdout[:40]!r}")
+
+
 def check_help_words(report: Report, program: Program, commands: list[dict]) -> None:
     """Section 6: what `help` answers for a word. An identifier is its command; a prefix of commands a human is
     shown is their family; any other word fails with INVALID_COMMAND, a topic of the program's own included.
@@ -1510,6 +1542,7 @@ def _run_kit(program: Program, report: Report) -> Report:
     check_failure(report, "help of an unknown identifier fails with INVALID_COMMAND",
                   program.run("help", "kit-no-such-command", "--json"), "INVALID_COMMAND")
     check_help_words(report, program, commands)
+    check_colors(report, program)
     check_failure(report, "an option the command does not have fails before --help and names the command",
                   program.run("version", "--kit-no-such-option", "--help", "--json"), "VALIDATION_FAILED")
     incomplete = program.run("completion", "--help", "--format", "json", "--non-interactive")
