@@ -18,7 +18,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
 
-## Unreleased
+## 2.19.0 — 2026-10-23
 
 No program fails from this version: a recommendation, the text catching up
 with the schema, and the generated lines corrected. A product had answered
