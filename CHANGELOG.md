@@ -5,7 +5,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 
 | Tag | A program fails from this tag when |
 | --- | --- |
-| Unreleased | NO_COLOR or TERM=dumb undoes `--color always`; `CLICOLOR_FORCE` wins over `--color never`, or, when it honors `CLICOLOR_FORCE`, NO_COLOR or TERM=dumb wins over it; it colors an envelope, a `jsonl` record or the `text` of the data of `help` |
+| 2.18.0 | NO_COLOR or TERM=dumb undoes `--color always`; `CLICOLOR_FORCE` wins over `--color never`, or, when it honors `CLICOLOR_FORCE`, NO_COLOR or TERM=dumb wins over it; it colors an envelope, a `jsonl` record or the `text` of the data of `help` |
 | 2.17.0 | it refuses `help PREFIX` for a prefix of commands a human is shown, lists a hidden command in that family, or answers it for a string that only begins one; it answers `help` of a word that names no command, a topic of its own such as `conventions` included; `help COMMAND_ID` does not show the command's examples; the text of its general help names a hidden command; `__complete` after `help` or `describe` offers a word that is no identifier |
 | 2.16.0 | it declares a `defaultCommand` that is missing, unavailable, hidden, of section 6, a delegate or an `execute` command, or leaves it out of a form of `describe`; with a default declared, a first option and `--help` do not give the default command's help, `--help` in first place does not give the general help, a bare word after a first option or a one-dash word in first place is not refused in the default command's name, an unknown first word is not refused with `INVALID_COMMAND`, or `__complete` does not read its words as the line is read |
 | 2.15.0 | it does not refuse a repeated `--field`; its static completion script does not carry its version as a word; `__complete` does not offer the next word of a multi-word command, or the declared choices; it reads a word that starts with one dash as an operand; `--json` wins over a later `--format text`, or `--compact` over a later `--pretty`; an example of its catalog has a value outside the grammars of section 3; its catalog declares `preview`, `apply` or `commit` outside a transaction, `passthrough` without `external`, an identifier with an empty segment, or the identifier `unknown` |
@@ -18,7 +18,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
 
-## Unreleased
+## 2.18.0 — 2026-10-23
 
 Colors in an order. The text named `--color`, `NO_COLOR` and `TERM=dumb`
 without saying which comes first, and a framework honored `CLICOLOR_FORCE`,
