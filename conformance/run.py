@@ -43,6 +43,7 @@ GLOBAL_OPTIONS = {
     "--field": {"name": "NAME", "type": "string"},
     "--color": {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]},
     "--help": None,
+    "--lang": {"name": "TAG", "type": "string", "pattern": "^[A-Za-z]{2,3}(-[A-Za-z]{4})?(-([A-Za-z]{2}|[0-9]{3}))?$"},
 }
 BUILT_INS = {"help": ["help"], "version": ["version"], "describe": ["describe"], "completion": ["completion"],
              "complete.candidates": ["__complete"]}
@@ -55,8 +56,10 @@ class Program:
         self.command = command
         self.timeout = timeout
         self.failures: list[str] = []
-        self.env = {**os.environ, "NO_COLOR": "1"}
+        # section 5: the language of the human text is the canonical one, whatever the machine running the kit
+        self.env = {**os.environ, "NO_COLOR": "1", "LC_ALL": "C.UTF-8", "LC_MESSAGES": "", "LANG": ""}
         self.env.pop("MAELYS_CLI_FORMAT", None)
+        self.env.pop("MAELYS_CLI_LANG", None)
 
     def run(self, *arguments: str, env: dict | None = None) -> subprocess.CompletedProcess:
         argv = [*self.command, *arguments]
@@ -910,6 +913,61 @@ def declared_patterns(catalog: dict, commands: list[dict]) -> list[tuple[str, st
     return found
 
 
+def check_language(report: Report, program: Program, catalog: dict) -> None:
+    """Section 5, Language: --lang, a variable and the locale change the human text and nothing else; a tag the
+    program has no language for gives the canonical one; a malformed one is refused; a failure in text keeps
+    `PROGRAM: [CODE] ` and a hint line `Label: hint` in every language."""
+    def answer(*words: str, env: dict | None = None):
+        done = program.run(*words, env=env)
+        try:
+            return parse_json(done.stdout if done.returncode == 0 else done.stderr)
+        except (ValueError, RecursionError):
+            return None
+    version = answer("version", "--json")
+    canonical = version.get("data", {}).get("lang") if isinstance(version, dict) else None
+    if not isinstance(canonical, str):
+        report.skip("the checks of --lang", "version names no canonical language")
+        return
+    french = {"LC_ALL": "fr_FR.UTF-8"}
+    languages = [(["--lang", tag], None) for tag in (canonical, canonical.upper(), "fr", "de-CH", "zz")] \
+        + [([], french), ([], {"LC_ALL": "", "LC_MESSAGES": "fr_FR.UTF-8"}), ([], {"LC_ALL": "", "LANG": "de_DE.UTF-8"})]
+    # the language options go before the `--` of __complete, after which every word is one to complete
+    for name, words, after in (("describe", ("describe", "--json"), ()), ("version", ("version", "--json"), ()),
+                               ("a failure envelope", ("kit-no-such-command", "--json"), ()),
+                               ("the commands of help", ("help", "--json"), ()),
+                               ("the words of __complete", ("__complete", "--json"), ("--", ""))):
+        base = answer(*words, *after)
+        if name == "the commands of help":
+            pick = lambda body: body.get("data", {}).get("commands") if isinstance(body, dict) else None  # noqa: E731
+        else:
+            pick = lambda body: body  # noqa: E731
+        differ = [" ".join(extra) or ",".join(f"{key}={value}" for key, value in (env or {}).items() if value)
+                  for extra, env in languages if pick(answer(*words, *extra, *after, env=env)) != pick(base)]
+        report.add(f"{name} is the same in every language", base is not None and not differ, f"differs under {differ[:3]}")
+    plain = program.run("help", "--non-interactive")
+    for words, env, name in ((["--lang", "zz"], None, "a tag the program has no language for gives the canonical text"),
+                             (["--lang", "zz"], french, "the source that decides decides alone: --lang zz under a "
+                                                       "French locale gives the canonical text")):
+        done = program.run("help", "--non-interactive", *words, env=env)
+        report.add(name, done.returncode == 0 and done.stdout == plain.stdout, f"exit {done.returncode}, {done.stdout[:60]!r}")
+    lower = program.run("help", "--non-interactive", "--lang", "fr")
+    upper = program.run("help", "--non-interactive", "--lang", "FR")
+    report.add("a tag is compared regardless of case", lower.returncode == 0 and lower.stdout == upper.stdout,
+               f"--lang FR: {upper.stdout[:60]!r}")
+    for tag in ("en_US", "e", "english"):
+        check_failure(report, f"--lang {tag}, a malformed tag, fails with VALIDATION_FAILED",
+                      program.run("version", "--lang", tag, "--json"), "VALIDATION_FAILED")
+    lead = f"{catalog.get('program')}: [INVALID_COMMAND] "
+    kept = []
+    for extra, env in languages:
+        lines = program.run("kit-no-such-command", *extra, env=env).stderr.splitlines()
+        if not lines or not lines[0].startswith(lead) or \
+                (len(lines) > 1 and re.fullmatch(r"[^:]+: \S.*", lines[1]) is None):
+            kept.append(" ".join(extra) or str(env))
+    report.add("a failure in text keeps PROGRAM: [CODE] and a hint line Label: hint in every language", not kept,
+               f"not under {kept[:3]}")
+
+
 def check_patterns(report: Report, program: Program, catalog: dict, commands: list[dict]) -> None:
     """Section 3: every pattern of a value is in the subset, and within the budget every implementation accepts;
     a value with a final newline does not match a pattern that ends in `$`."""
@@ -1185,7 +1243,8 @@ def trunk_shape(item: dict, expected: dict | None) -> bool:
     if expected is None:
         return argument is None
     return isinstance(argument, dict) and argument.get("type") == expected["type"] \
-        and set(argument.get("choices", [])) == set(expected.get("choices", []))
+        and set(argument.get("choices", [])) == set(expected.get("choices", [])) \
+        and argument.get("pattern") == expected.get("pattern")
 
 
 def option_shape(option: dict) -> dict:
@@ -1579,6 +1638,7 @@ def _run_kit(program: Program, report: Report) -> Report:
                   program.run("help", "kit-no-such-command", "--json"), "INVALID_COMMAND")
     check_help_words(report, program, commands)
     check_patterns(report, program, catalog, commands)
+    check_language(report, program, catalog)
     check_colors(report, program)
     check_failure(report, "an option the command does not have fails before --help and names the command",
                   program.run("version", "--kit-no-such-option", "--help", "--json"), "VALIDATION_FAILED")
@@ -1646,6 +1706,8 @@ def _run_kit(program: Program, report: Report) -> Report:
         if long == "--field":
             # with --json the line is refused for --field itself: only a line that would render tells a repetition
             words, tail = ["--field", "version"], ["--format", "jsonl"]
+        elif long == "--lang":
+            words = ["--lang", "en"]  # a well-formed tag, which only its repetition refuses
         check_failure(report, f"duplicate {long} fails with VALIDATION_FAILED",
                       program.run("version", *words, *words, *tail), "VALIDATION_FAILED")
     for long in ("--format", "--color", "--progress", "--pager"):
@@ -1803,6 +1865,9 @@ def main(argv: list[str]) -> int:
                          "skipped": [f"{check['name']}: {check['detail']}" for check in report.checks
                                      if check["passed"] is None],
                          "notChecked": ["product business behavior and writes",
+                                        "the translations of a program, which its own tests hold; that LANGUAGE is "
+                                        "not read; the variable an implementation honors for the language; --lang "
+                                        "on a protocol stream and handed to a delegate",
                                         "what a protocol stream or a delegate does with its stdio and its exit "
                                         "status",
                                         "terminal rendering (tested separately by implementations)",

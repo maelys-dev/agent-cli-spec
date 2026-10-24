@@ -20,6 +20,10 @@ import subprocess
 import sys
 
 BREAK = os.environ.get("CONFORMANT_BREAK", "")
+# Section 5, Language: the canonical language, the others the program has, and the pattern of a tag
+CANONICAL, LANGUAGES = "en", ("en", "fr")
+TAG = "^[A-Za-z]{2,3}(-[A-Za-z]{4})?(-([A-Za-z]{2}|[0-9]{3}))?$"
+HUMAN = CANONICAL
 PROGRAM = "conformant"
 EXIT_CODES = {"0": "command completed", "1": "execution failed", "2": "valid report with violations"}
 
@@ -49,7 +53,8 @@ GLOBAL_OPTIONS = [
     option("--color", "Colors.", {"name": "VALUE", "type": "choice", "choices": ["auto", "always", "never"]}, "auto"),
     option("--field", "Render one member of data.", {"name": "NAME", "type": "string"}),
     option("--help", "Help."),
-]
+] + ([] if BREAK == "lang-missing" else [option("--lang", "Language of the human text.",
+                                                {"name": "TAG", "type": "string", "pattern": TAG})])
 
 
 def command(identifier, pattern, usage, purpose, effect, operands=(), options=(), constraints=(), hidden=False,
@@ -234,6 +239,35 @@ def envelope(command_id, ok, exit_code, payload, compact):
     return json.dumps(body, indent=None if compact else 2, separators=(",", ":") if compact else None) + "\n"
 
 
+def locale_tag(value):
+    """Section 5, Language: a locale `language_TERRITORY.codeset@modifier` reads as `language-TERRITORY`; `C`,
+    `POSIX`, a `C.` locale and one that does not read so give the canonical language (None)."""
+    if value in ("C", "POSIX") or value.startswith("C."):
+        return None
+    match = re.fullmatch(r"([A-Za-z]{2,3})(?:_([A-Za-z]{2}|[0-9]{3}))?(?:\.[^@]*)?(?:@.*)?", value)
+    return None if match is None else match.group(1) + ("-" + match.group(2) if match.group(2) else "")
+
+
+def human_language(asked):
+    """Section 5, Language: the first source set and not empty decides alone, looked up as RFC 4647 says."""
+    tag = asked
+    if not tag:
+        for name in ("LC_ALL", "LC_MESSAGES", "LANG"):
+            if os.environ.get(name, ""):
+                tag = locale_tag(os.environ[name])
+                break
+    if not tag:
+        return CANONICAL
+    parts = tag.split("-") if BREAK == "lang-case" else tag.lower().split("-")
+    while parts:
+        if "-".join(parts) in LANGUAGES:
+            return "-".join(parts)
+        parts.pop()
+    if asked and BREAK == "lang-next-source":
+        return human_language(None)
+    return CANONICAL
+
+
 def colors(option, stream):
     """Section 5: whether a text rendering is colored, decided by the first of the line's --color, CLICOLOR_FORCE,
     NO_COLOR and TERM=dumb that applies, and otherwise by the stream being a terminal."""
@@ -257,9 +291,14 @@ def colors(option, stream):
 def fail(command_id, code, message, fmt, compact, hint="read describe."):
     if BREAK == "code-drift" and code == "INVALID_COMMAND":
         code = "INVALID_PATH"
+    french = HUMAN == "fr"
     if fmt == "text":
-        sys.stderr.write(f"{PROGRAM}: [{code}] {message}\nHint: {hint}\n")
+        # Section 5, Language: `PROGRAM: [CODE] ` and a hint line `Label: hint` in every language
+        lead = f"Erreur [{code}]" if french and BREAK == "lang-prefix" else f"{PROGRAM}: [{code}]"
+        sys.stderr.write(f"{lead} {message}\n{'Conseil :' if french else 'Hint:'} {hint}\n")
     else:
+        if french and BREAK == "lang-envelope":
+            message = "Échec : " + message
         sys.stderr.write(envelope(command_id, False, 1, {"code": code, "message": message, "hint": hint}, compact))
     return 1
 
@@ -813,6 +852,12 @@ def main(argv):
             compact = (name == "--compact") == (value != "false")
     if BREAK == "json-always-wins" and options.get("--json") in (True, "true"):
         fmt = "json"
+    global HUMAN
+    asked = options.get("--lang")
+    HUMAN = human_language(asked if isinstance(asked, str) and re.fullmatch(TAG, asked) else None)
+    if BREAK == "lang-unavailable-fails" and isinstance(asked, str) and HUMAN == CANONICAL \
+            and asked.lower().split("-")[0] != CANONICAL:
+        return fail("unknown", "VALIDATION_FAILED", f"No language {asked!r}.", fmt, compact)
     implicit = bool(DEFAULT) and (not argv or (argv[0].startswith("-") and argv[0] not in ("--help", "--version")))
     if BREAK == "default-help-general" and "--help" in options:
         implicit = False
@@ -945,10 +990,10 @@ def main(argv):
         sys.stderr.write("working... \rworking... done\n")
     if identifier == "version":
         data = {"product": "Conformant", "program": PROGRAM, "version": "1.0.0", "contract": "agent-cli/v2",
-                "cliApi": 1, "framework": "fixture"}
+                "cliApi": 1, "framework": "fixture", "lang": CANONICAL}
         text = f"{PROGRAM} 1.0.0\n"
     elif identifier == "help":
-        text = "usage\n"
+        text = "utilisation\n" if HUMAN == "fr" else "usage\n"
         if DEFAULT and not operands:
             pattern = " ".join(next(item for item in CATALOG if item["id"] == DEFAULT)["pattern"])
             text += (f"default command: {DEFAULT}, run as `{PROGRAM} [OPTIONS] [-- OPERANDS]` or `{PROGRAM} {pattern} ...`;"
@@ -977,12 +1022,15 @@ def main(argv):
         one = operands[:1] if operands and operands[0] in by_id and BREAK != "help-lists-all" else None
         data = {"text": text, "commands": one or family or ([] if topic else [
             item["id"] for item in CATALOG if not item["hidden"] or BREAK == "help-lists-hidden"])}
+        if HUMAN == "fr" and BREAK == "lang-commands":
+            data["commands"] = data["commands"][:-1]
         if colors(options.get("--color", "auto"), sys.stdout):
             text = text.replace("usage", "\x1b[1musage\x1b[0m", 1)
             if BREAK == "color-json":
                 data["text"] = text
     elif identifier == "describe":
-        data = {"schemaVersion": 1, "program": PROGRAM, "product": "Conformant", "version": "1.0.0",
+        product = "Conforme" if HUMAN == "fr" and BREAK == "lang-describe" else "Conformant"
+        data = {"schemaVersion": 1, "program": PROGRAM, "product": product, "version": "1.0.0",
                 "contract": "agent-cli/v2", "cliApi": 1, "framework": "fixture"}
         if operands:
             if operands[0] not in by_id:

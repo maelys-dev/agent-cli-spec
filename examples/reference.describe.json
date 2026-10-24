@@ -139,6 +139,19 @@
       "summary": "Help.",
       "requires": [],
       "conflictsWith": []
+    },
+    {
+      "long": "--lang",
+      "required": false,
+      "repeatable": false,
+      "summary": "Language of the human text.",
+      "requires": [],
+      "conflictsWith": [],
+      "argument": {
+        "name": "TAG",
+        "type": "string",
+        "pattern": "^[A-Za-z]{2,3}(-[A-Za-z]{4})?(-([A-Za-z]{2}|[0-9]{3}))?$"
+      }
     }
   ],
   "invariants": [

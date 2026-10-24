@@ -5,6 +5,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 
 | Tag | A program fails from this tag when |
 | --- | --- |
+| Unreleased | its catalog does not list `--lang` with the pattern of section 5, or `version` names no `lang`; it refuses a well-formed tag it has no language for, takes a tag with its case into account, or does not refuse a malformed or repeated one; `describe`, a failure envelope, the data of `version`, the `commands` of `help` or the words of `__complete` change with the language; `--lang` with a tag it has no language for does not give the canonical text under another locale; a failure in text does not keep `PROGRAM: [CODE] ` and a hint line `Label: hint` |
 | 2.20.0 | a `pattern` of a value in its catalog is outside the subset of section 3: an escape of anything but a metacharacter (`\d`, `\-`, `\w`), a non-capturing group, a bound above 255 or written with a leading zero, a `-` inside a class that is neither first, last nor the end of a range, a bare `]`, `{` or `}`, a lazy or doubled quantifier, a character that is not printable ASCII; it matches a value with a final newline against a pattern that ends in `$` |
 | 2.18.0 | NO_COLOR or TERM=dumb undoes `--color always`; `CLICOLOR_FORCE` wins over `--color never`, or, when it honors `CLICOLOR_FORCE`, NO_COLOR or TERM=dumb wins over it; it colors an envelope, a `jsonl` record or the `text` of the data of `help` |
 | 2.17.0 | it refuses `help PREFIX` for a prefix of commands a human is shown, lists a hidden command in that family, or answers it for a string that only begins one; it answers `help` of a word that names no command, a topic of its own such as `conventions` included; `help COMMAND_ID` does not show the command's examples; the text of its general help names a hidden command; `__complete` after `help` or `describe` offers a word that is no identifier |
@@ -18,6 +19,39 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.9.0 | it declares `completion.install` and refuses a `--field` only after it has written; it declares `--expect` on a transaction without the reserved shape |
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
+
+## Unreleased
+
+The language of the human text. maelys-cli asked for it, its first
+consumer showing the framework's help in English beside a catalog in
+French; the trunk had no option for it, and the text rendering of a failure
+named its label.
+
+- **`--lang TAG`** joins the trunk (section 5, "Language"). A program has a
+  canonical language, which `version` names (`lang`), and MAY have others.
+  The language is decided by the first set and not empty of `--lang`, a
+  variable of the implementation (`MAELYS_CLI_LANG`), `LC_ALL`,
+  `LC_MESSAGES` and `LANG`, and otherwise is the canonical one; the source
+  that decides decides alone, its tag looked up as RFC 4647 says, a tag the
+  program has no language for giving the canonical one, never a failure.
+  `LANGUAGE` is not read. A tag is `language[-Script][-REGION]`, the subset
+  of RFC 5646 the catalog declares as a pattern, compared regardless of
+  case; a malformed one on the line fails with `VALIDATION_FAILED`.
+- **The language changes the human text and nothing else**: the text
+  rendering, the help and its `text` in JSON, and the text of a failure. A
+  request comes before a preference, as for colors. `describe`, a failure
+  envelope, the data of `version`, the `commands` of `help` and the words of
+  `__complete` are the same in every language; a failure in text keeps
+  `PROGRAM: [CODE] ` and a hint line `Label: hint`, whose label may be
+  translated. An agent that reads text sets `LC_ALL=C` or reads JSON.
+- **A program fails from this version** when its catalog does not list
+  `--lang` or `version` names no `lang`: as for `--progress` in 2.3.0, a
+  program with no language but the canonical accepts the option and writes
+  as before.
+- The kit runs every line under `LC_ALL=C.UTF-8` with the Maelys language
+  variable removed, and checks the invariance under five tags and three
+  locales. The fixture has French for its help and its hint label, and eight
+  defects prove the checks.
 
 ## 2.20.0 — 2026-10-24
 
