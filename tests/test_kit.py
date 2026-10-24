@@ -239,6 +239,8 @@ class KitTest(unittest.TestCase):
                                  ("unavailable-runs", "an unavailable command fails and does not run"),
                                  ("unavailable-after-rendering", "names its cause, not its rendering"),
                                  ("help-unknown-general", "help of an unknown identifier fails"),
+                                 ("pattern-python-reading", "a value with a final newline does not match"),
+                                 ("pattern-outside-subset", "every pattern of a value is in the subset"),
                                  ("color-no-color-first", "--color always is not undone by NO_COLOR"),
                                  ("color-force-first", "--color never leaves the text plain"),
                                  ("color-no-color-over-force", "CLICOLOR_FORCE comes before NO_COLOR"),

@@ -28,7 +28,8 @@ import tempfile
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from validate import compile_pattern, json_equal, unsupported_keywords, validate  # noqa: E402
+from patterns import PatternError, compile_value_pattern, over_budget, problem as pattern_problem  # noqa: E402
+from validate import json_equal, unsupported_keywords, validate  # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 SCHEMAS = {name: json.loads((HERE.parent / "schemas" / f"{name}.json").read_text(encoding="utf-8"))
@@ -360,10 +361,11 @@ def value_problem(declaration: dict, value: str) -> str:
             return f"{value!r} is not a digest of {declaration.get('algorithms')}, in lower case and of its algorithm's width"
     if kind in ("string", "path") and isinstance(declaration.get("pattern"), str):
         try:
-            if compile_pattern(declaration["pattern"]).search(value) is None:
+            # section 3: `.` is no line terminator, `$` the end of the value, a match anywhere in it
+            if compile_value_pattern(declaration["pattern"]).search(value) is None:
                 return f"{value!r} does not match {declaration['pattern']}"
-        except re.error:
-            pass
+        except PatternError:
+            pass  # a pattern outside the subset is a failure of the catalog, reported once by check_patterns
     return ""
 
 
@@ -890,6 +892,40 @@ def check_colors(report: Report, program: Program) -> None:
                    f"with NO_COLOR and TERM=dumb: {both.stdout[:40]!r}")
 
 
+def declared_patterns(catalog: dict, commands: list[dict]) -> list[tuple[str, str]]:
+    """Every `pattern` of a `string` or `path` value: where it is declared, and the pattern."""
+    found = []
+    for command in commands:
+        for item in command.get("input", {}).get("options", []):
+            argument = item.get("argument") or {}
+            if argument.get("type") in ("string", "path") and isinstance(argument.get("pattern"), str):
+                found.append((f"{command['id']}: {item.get('long')}", argument["pattern"]))
+        for operand in command.get("input", {}).get("operands", []):
+            if operand.get("type") in ("string", "path") and isinstance(operand.get("pattern"), str):
+                found.append((f"{command['id']}: operand {operand.get('name')}", operand["pattern"]))
+    for item in catalog.get("globalOptions", []):
+        argument = item.get("argument") or {}
+        if argument.get("type") in ("string", "path") and isinstance(argument.get("pattern"), str):
+            found.append((f"global option {item.get('long')}", argument["pattern"]))
+    return found
+
+
+def check_patterns(report: Report, program: Program, catalog: dict, commands: list[dict]) -> None:
+    """Section 3: every pattern of a value is in the subset, and within the budget every implementation accepts;
+    a value with a final newline does not match a pattern that ends in `$`."""
+    found = declared_patterns(catalog, commands)
+    outside = [f"{where}: {pattern} ({pattern_problem(pattern)})" for where, pattern in found if pattern_problem(pattern)]
+    report.add("every pattern of a value is in the subset of section 3", not outside, "; ".join(outside[:3]))
+    beyond = [f"{where}: {over_budget(pattern)}" for where, pattern in found
+              if not pattern_problem(pattern) and over_budget(pattern)]
+    if beyond:
+        report.skip("every pattern is within the budget of section 3", "; ".join(beyond[:3]) + ": an implementation "
+                    "MAY refuse it")
+    check_failure(report, "a value with a final newline does not match a pattern that ends in $",
+                  program.run("describe", "--summary", "--prefix", "note\n", "--json"),
+                  "VALIDATION_FAILED")
+
+
 def check_help_words(report: Report, program: Program, commands: list[dict]) -> None:
     """Section 6: what `help` answers for a word. An identifier is its command; a prefix of commands a human is
     shown is their family; any other word fails with INVALID_COMMAND, a topic of the program's own included.
@@ -1338,7 +1374,7 @@ def _run_kit(program: Program, report: Report) -> Report:
     report.add("describe declares --prefix",
                prefix_option.get("argument", {}).get("type") == "string"
                and prefix_option.get("argument", {}).get("pattern")
-               in (r"^[a-z]([a-z0-9.-]*[a-z0-9-])?$", r"^[a-z](?:[a-z0-9.-]*[a-z0-9-])?$")
+               == r"^[a-z]([a-z0-9.-]*[a-z0-9-])?$"
                and "--summary" in prefix_option.get("requires", [])
                and "COMMAND_ID" in prefix_option.get("conflictsWith", []),
                f"option {prefix_option!r}")
@@ -1542,6 +1578,7 @@ def _run_kit(program: Program, report: Report) -> Report:
     check_failure(report, "help of an unknown identifier fails with INVALID_COMMAND",
                   program.run("help", "kit-no-such-command", "--json"), "INVALID_COMMAND")
     check_help_words(report, program, commands)
+    check_patterns(report, program, catalog, commands)
     check_colors(report, program)
     check_failure(report, "an option the command does not have fails before --help and names the command",
                   program.run("version", "--kit-no-such-option", "--help", "--json"), "VALIDATION_FAILED")

@@ -111,7 +111,9 @@ CATALOG.append(command(
      option("--budget", "A size.", {"name": "SIZE", "type": "size"}, "1M"),
      option("--wait", "A duration.", {"name": "WAIT", "type": "duration"}, "5s"),
      option("--root", "An absolute path.", {"name": "ROOT", "type": "absolute-path"}),
-     option("--name", "A matched name.", {"name": "NAME", "type": "string", "pattern": "^[a-z][a-z0-9-]*$"}),
+     option("--name", "A matched name.", {"name": "NAME", "type": "string",
+                                          "pattern": "^[a-z][0-9a-z-]*\\d?$" if BREAK == "pattern-outside-subset"
+                                          else "^[a-z][a-z0-9-]*$"}),
      option("--depth", "A bounded integer.", {"name": "DEPTH", "type": "integer", "minimum": -8, "maximum": 8}),
      option("--report", "Where the report goes.", {"name": "FILE", "type": "path"}, requires=["--strict"]),
      option("--sha", "A sha256.", {"name": "SHA", "type": "sha256", "x-hint": "lowercase"}),
@@ -694,9 +696,36 @@ def kind_problem(declaration, value):
         if algorithm not in declaration["algorithms"] or re.fullmatch(r"[0-9a-f]+", digits) is None \
                 or len(digits) != WIDTHS.get(algorithm, len(digits)):
             return f"not a digest of {', '.join(declaration['algorithms'])}, in lower case and of its algorithm's width"
-    if kind in ("string", "path") and declaration.get("pattern") and re.search(declaration["pattern"], value) is None:
+    if kind in ("string", "path") and declaration.get("pattern") and \
+            (re.search if BREAK == "pattern-python-reading" else value_search)(declaration["pattern"], value) is None:
         return f"not matching {declaration['pattern']}"
     return None
+
+
+def value_search(pattern, value):
+    """Section 3: a pattern of the subset read as the text says, `.` being no line terminator and `^` and `$` the two
+    ends of the value; Python's own `$` would also match before a final newline."""
+    translated, place, inside = [], 0, False
+    while place < len(pattern):
+        character = pattern[place]
+        if character == "\\" and not inside:
+            translated.append(pattern[place:place + 2])
+            place += 2
+            continue
+        if inside:
+            inside = character != "]"
+            translated.append("\\" + character if character in "&|~" else character)
+        elif character == "[":
+            inside = True
+            translated.append(character)
+        elif character == ".":
+            translated.append("[^\\n\\r\\u2028\\u2029]")
+        elif character in "^$":
+            translated.append("\\A" if character == "^" else "\\Z")
+        else:
+            translated.append(character)
+        place += 1
+    return re.search("".join(translated), value)
 
 
 def whole_line_problem(command, options, operands):

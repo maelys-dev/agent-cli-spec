@@ -246,14 +246,56 @@ that starts with `--` is still a value.
 `pattern`, on a `string` or `path` value, is the regular expression the value
 MUST match; the implementation enforces it by the means of its choice, a
 regex engine or code, and refuses a mismatch with `VALIDATION_FAILED`. It is
-written in the common subset of ECMA-262 and POSIX ERE: literals, ASCII
-character classes and ranges, `.`, the quantifiers `*`, `+`, `?` and `{m,n}`,
-alternation, plain groups `(...)`, the anchors `^` and `$`; no named group,
-no non-capturing group `(?:...)`, which POSIX ERE lacks, no `\p{...}` class,
-no lookaround, no back-reference. Written so, the same motif
-reads the same for an agent, which MAY check a value against it before
-invoking, for the conformance kit, and for an implementation that checks it
-by hand.
+written in a subset that ECMA-262, read with the `u` flag, and POSIX ERE
+read the same way, so that the same pattern reads the same for an agent,
+which MAY check a value against it before invoking, for the conformance kit,
+and for an implementation that checks it by hand.
+
+Its grammar:
+
+- a pattern is printable ASCII, U+0020 to U+007E;
+- a literal is any of them but the fourteen metacharacters `\ ^ $ . [ ] ( )
+  * + ? { } |`, each of which is a literal when escaped by `\`. `\` before
+  anything else is outside the subset, `\d`, `\w`, `\s`, `\t`, `\-` and `\/`
+  among others, which engines read differently. A `]`, `{` or `}` meant
+  literally outside a class is always escaped;
+- a class is `[...]` or `[^...]`, not empty, without `[`, `]` or `\` inside,
+  which rules out `[:alpha:]`. A range `a-z` does not run backwards, and a
+  `-` is first, last or the end of a range: `[a-z0-9.-]`, not `[a-z-9]`;
+- `.`, the anchors `^` and `$`, plain groups `(...)`, never empty, and
+  alternation `|`, of no empty branch;
+- the quantifiers `*`, `+`, `?`, `{m}`, `{m,}` and `{m,n}`, with `m` ≤ `n` ≤
+  255 written in decimal without a leading zero. A quantifier follows a
+  literal, `.`, a class or a group, never an anchor, another quantifier or
+  nothing: no `a**`, no lazy `*?`, no `{,n}`.
+
+Nothing else: no named group, no non-capturing group `(?:...)`, which POSIX
+ERE lacks, no `\p{...}` class, no lookaround, no back-reference.
+
+Its reading:
+
+- a value is a sequence of code points; a byte of no valid UTF-8 sequence
+  counts as one, which only `.` and a negated class match;
+- `.` matches any code point but the four line terminators of ECMA-262,
+  U+000A, U+000D, U+2028 and U+2029. An engine that reads it otherwise, POSIX
+  ERE matching all four and Python and RE2 all but U+000A, is given
+  `[^\n\r  ]` instead. A value that may hold a line terminator is
+  better described by a class than by `.`;
+- `^` and `$` hold at the start and at the end of the value only, wherever
+  they are written; `$` does not match before a final newline, as it does in
+  Python's `re`;
+- a value matches when some part of it does, as `RegExp.prototype.test` and
+  `regexec` read it: a pattern without anchors matches anywhere.
+
+Its budget: an implementation MUST accept every pattern of the subset that
+has at most 32 nested groups and at most 65 536 atoms once its bounds are
+expanded, and MAY refuse a larger one when it starts, saying why; a catalog
+SHOULD stay within it. The conformance kit measures it as
+`conformance/patterns.py` does. An implementation SHOULD check a value in
+time linear in the length of the value times the expanded size of the
+pattern, without backtracking: the value comes from whoever invokes the
+program, and `(a+)+b` takes exponential time in a backtracking engine. One
+whose language offers no other engine says so.
 
 ## 4. Effects
 
