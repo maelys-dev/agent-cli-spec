@@ -53,6 +53,8 @@ RE2 apart on each. The kit read patterns with Python's `re`, and so took
   `--prefix`.
 - The fixture reads its patterns as the text says, and two defects prove
   the checks.
+- Adopts maelys-release v0.65.0: two pinned workflows and the managed texts,
+  nothing asked of this repository.
 
 ## 2.19.0 — 2026-10-23
 
