@@ -3,14 +3,15 @@
   "$id": "https://github.com/maelys-dev/agent-cli-spec/schemas/version.json",
   "title": "agent-cli/v2 version data",
   "type": "object",
-  "required": ["product", "program", "version", "contract", "cliApi", "framework"],
+  "required": ["product", "program", "version", "contract", "cliApi", "framework", "lang"],
   "properties": {
     "product": {"type": "string", "minLength": 1},
     "program": {"type": "string", "minLength": 1},
     "version": {"type": "string", "minLength": 1},
     "contract": {"const": "agent-cli/v2"},
     "cliApi": {"const": 1},
-    "framework": {"type": "string"}
+    "framework": {"type": "string"},
+    "lang": {"type": "string", "pattern": "^[A-Za-z]{2,3}(-[A-Za-z]{4})?(-([A-Za-z]{2}|[0-9]{3}))?$"}
   },
   "patternProperties": {"^x-": {}},
   "additionalProperties": false

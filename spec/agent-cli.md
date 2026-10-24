@@ -382,6 +382,7 @@ Every program accepts, on every command:
 | `--verbose` | details of the run on stderr, in text mode only (default silent) |
 | `--pager auto\|always\|never` | pager for the text rendering when stdout is a terminal (default `auto`) |
 | `--field NAME` | render one member of `data`, in text or `jsonl` |
+| `--lang TAG` | the language of the human text, chosen as "Language" below says |
 | `--help` | the help of the selected command |
 
 None of these options is repeatable; a duplicate fails with
@@ -396,9 +397,9 @@ catalog gives its argument. `--flag=false` disables the flag, including
 the rendering options: they choose or shape what a command writes on stdout.
 A `protocol-stream` command refuses every rendering option when given, and a
 delegate receives every option verbatim with the rest of its arguments, as
-section 9 says. `--progress` and `--verbose` are not rendering options: a
-`protocol-stream` command accepts them and keeps its diagnostics on stderr
-as section 9 requires.
+section 9 says. `--progress`, `--verbose` and `--lang` are not rendering
+options: a `protocol-stream` command accepts them and keeps its diagnostics
+on stderr as section 9 requires.
 
 ### The format
 
@@ -436,6 +437,49 @@ request overrides, as its own convention intends. Nothing in JSON is ever
 colored: an envelope, a `jsonl` record and the `text` of the data of `help`
 stay plain whatever decides, so that an agent never reads an escape
 sequence. A program that colors nothing has nothing to decide.
+
+### Language: `--lang`
+
+A program writes its human text in one canonical language, which `version`
+names (`lang`), and MAY write it in others. The human text is what a person
+reads: the text rendering, the help, its `text` in JSON included, and the
+text of a failure. Which language is decided before the command runs, by
+the first of these that is set and not empty:
+
+1. `--lang TAG` on the line;
+2. a variable of the implementation, which it MAY honor (`MAELYS_CLI_LANG`
+   in the Maelys implementations);
+3. `LC_ALL`, then `LC_MESSAGES`, then `LANG`.
+
+Otherwise the canonical language is used. A `TAG` is a language of two or
+three letters, then optionally a script of four letters and a region of two
+letters or three digits, each after a `-` (`fr`, `fr-CA`, `zh-Hant-TW`,
+`es-419`), the subset of RFC 5646 the catalog declares as the pattern
+`^[A-Za-z]{2,3}(-[A-Za-z]{4})?(-([A-Za-z]{2}|[0-9]{3}))?$`, and is compared
+regardless of case. A malformed one fails with `VALIDATION_FAILED` on the
+line; from the variable, it is ignored. A locale `language_TERRITORY` with
+a codeset or a modifier reads as `language-TERRITORY` (`fr_FR.UTF-8` is
+`fr-FR`, and `sr_RS@latin` loses its modifier); `C`, `POSIX`, `C.UTF-8`, any
+`C.` locale and a locale that does not read so give the canonical language.
+`LANGUAGE`, which GNU gettext reads first, is not read.
+
+The source that decides decides alone. Its tag is looked up as RFC 4647
+says, cut from the right until a language the program has (`fr-CA`, then
+`fr`), and a tag the program has no language for gives the canonical one:
+never a failure, never the next source. A program with no language but the
+canonical accepts `--lang` and writes as before. A request comes before a
+preference, as for colors: `--lang` and the variable are asked for this
+line, a locale is a standing preference.
+
+The language changes the human text and nothing else. `describe` is the
+same document in every language; the members of a failure envelope, its
+`message`, `hint` and `issues` included, the data of `version`, the
+`commands` of `help`, the words of `__complete` and the rendering of a
+`json-records` command's records are the same; a member `--field` renders
+is the one JSON carries. The first line of a failure in text keeps `PROGRAM:
+[CODE] `, and its hint line the form `Label: hint`, a label then a colon:
+the label and the message may be translated. An agent that reads text sets
+`LC_ALL=C` or reads JSON.
 
 ### Progress and details: `--progress`, `--verbose`
 
@@ -533,7 +577,7 @@ rendering alone, a failure carrying no `data`. On a `json-records` command
 | Identifier | Pattern | Data |
 | --- | --- | --- |
 | `help` | `help [COMMAND_ID]`, also `--help` | `{"text": ..., "commands": [ids]}` |
-| `version` | `version`, also `--version` | `product`, `program`, `version`, `contract`, `cliApi`, `framework` |
+| `version` | `version`, also `--version` | `product`, `program`, `version`, `contract`, `cliApi`, `framework`, `lang` |
 | `describe` | `describe [COMMAND_ID] [--summary] [--prefix PREFIX]` | section 1 |
 | `completion` | `completion bash\|zsh\|fish` | `{"shell": ..., "script": ...}`; text mode prints the script |
 | `complete.candidates` | `__complete -- WORDS...`, hidden, `json-records` | `{"count": N, "records": [{"word": ...}]}` |
@@ -689,7 +733,9 @@ result. `--field` of section 5 applies these rules to one member of `data`. Text
 empty string both render as an empty field).
 
 Text rendering of a failure is `PROGRAM: [CODE] message` on stderr, followed
-by `Hint: ...` when present, colored as section 5 decides ("Colors").
+by `Hint: ...` when present, colored as section 5 decides ("Colors"); in a
+language other than the canonical one the message and the label `Hint` may be
+translated, as section 5 says ("Language").
 
 The format selects the rendering, never the stream. In text mode as in JSON,
 the rendering of a success goes to stdout and the rendering of a failure to

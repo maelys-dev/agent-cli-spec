@@ -20,7 +20,7 @@ class FixtureProgram:
 
     def __init__(self, defect="", transform=None, shells=False, static=False, default=""):
         """`default` declares a default command, through the variable the fixture reads at import."""
-        self.env = {"NO_COLOR": "1", "PAGER": "", "CONFORMANT_BREAK": defect,
+        self.env = {"NO_COLOR": "1", "PAGER": "", "LC_ALL": "C.UTF-8", "CONFORMANT_BREAK": defect,
                     "CONFORMANT_COMPLETION": "static" if static else "", "CONFORMANT_DEFAULT": default}
         if shells:
             self.command = [sys.executable, str(FIXTURE)]
