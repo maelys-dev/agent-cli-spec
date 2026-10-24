@@ -457,7 +457,8 @@ letters or three digits, each after a `-` (`fr`, `fr-CA`, `zh-Hant-TW`,
 `es-419`), the subset of RFC 5646 the catalog declares as the pattern
 `^[A-Za-z]{2,3}(-[A-Za-z]{4})?(-([A-Za-z]{2}|[0-9]{3}))?$`, and is compared
 regardless of case. A malformed one fails with `VALIDATION_FAILED` on the
-line; from the variable, it is ignored. A locale `language_TERRITORY` with
+line; from the variable, it decides all the same and gives the canonical
+language, never a failure and never the next source. A locale `language_TERRITORY` with
 a codeset or a modifier reads as `language-TERRITORY` (`fr_FR.UTF-8` is
 `fr-FR`, and `sr_RS@latin` loses its modifier); `C`, `POSIX`, `C.UTF-8`, any
 `C.` locale and a locale that does not read so give the canonical language.
