@@ -52,6 +52,8 @@ maelys-cli asked for it, cx having met it.
   reads `--version` before `--help`, which it had read the other way round,
   and two defects prove the checks. The generated lines leave the lines
   that rule decides out of the comparison with the default command.
+- Adopts maelys-release v0.65.1: two pinned workflows, nothing asked of this
+  repository.
 
 ## 2.21.0 — 2026-10-24
 
