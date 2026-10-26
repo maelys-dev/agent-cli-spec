@@ -240,7 +240,7 @@ class KitTest(unittest.TestCase):
                                  ("unavailable-after-rendering", "names its cause, not its rendering"),
                                  ("help-unknown-general", "help of an unknown identifier fails"),
                                  ("globals-before-help-ignored", "--non-interactive --version --json gives the version"),
-                                 ("complete-no-version", "after global options, offers --version"),
+                                 ("complete-no-version", "after global options or none, offers --version"),
                                  ("lang-missing", "catalog lists the global options"),
                                  ("lang-describe", "describe is the same in every language"),
                                  ("lang-envelope", "a failure envelope is the same in every language"),

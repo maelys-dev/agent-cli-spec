@@ -1024,8 +1024,14 @@ def check_globals_before_help(report: Report, program: Program, catalog: dict) -
         words = {str(record.get("word")) for record in parse_json(completed.stdout)["data"]["records"]}
     except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
         words = set()
-    report.add("__complete at the root, after global options, offers --version", "--version" in words,
-               f"offered {sorted(words)[:6]}")
+    bare = program.run("__complete", "--format", "json", "--non-interactive", "--", "--v")
+    try:
+        words |= {"" if "--version" in {str(record.get("word")) for record in parse_json(bare.stdout)["data"]["records"]}
+                  else "kit-missing-at-the-bare-root"}
+    except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
+        words.add("kit-missing-at-the-bare-root")
+    report.add("__complete at the root, after global options or none, offers --version",
+               "--version" in words and "kit-missing-at-the-bare-root" not in words, f"offered {sorted(words)[:6]}")
 
 
 def check_patterns(report: Report, program: Program, catalog: dict, commands: list[dict]) -> None:

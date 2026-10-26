@@ -680,9 +680,9 @@ given with hidden options excluded; choices; command identifiers after
 are offered. A hidden or an unavailable command is never offered, as a word or as an identifier: `describe` still answers
 for it, completion does not propose it. Whether options are offered before a
 `-` is typed is the implementation's choice, and a script follows its own
-`__complete` either way. At the root, after global options only, a word that
-starts with `-` is completed with `--version` among the candidates, the line
-reading as `PROGRAM --version` would.
+`__complete` either way. At the root, before any word but global options,
+none included, a word that starts with `-` is completed with `--version`
+among the candidates, the line reading as `PROGRAM --version` would.
 
 ### Installing the completion
 
