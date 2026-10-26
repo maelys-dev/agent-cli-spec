@@ -968,6 +968,66 @@ def check_language(report: Report, program: Program, catalog: dict) -> None:
                f"not under {kept[:3]}")
 
 
+def check_globals_before_help(report: Report, program: Program, catalog: dict) -> None:
+    """Section 6: global options only, then --help or --version, read as if that word came first. The global
+    options apply; a value is a value; a malformed or repeated option fails at step 2 in the name of help."""
+    def answer(*words: str) -> dict:
+        done = program.run(*words)
+        try:
+            body = parse_json(done.stdout if done.returncode == 0 else done.stderr)
+            return body if isinstance(body, dict) else {}
+        except (ValueError, RecursionError):
+            return {}
+    whole = program.run("--help", "--non-interactive")
+    leading = program.run("--non-interactive", "--help")
+    report.add("global options then --help give the help of the program, as --help first does",
+               leading.returncode == 0 and leading.stdout == whole.stdout, f"exit {leading.returncode}, "
+               f"{leading.stdout[:50]!r}")
+    asked = answer("--non-interactive", "--help", "--json")
+    plain = answer("help", "--json")
+    report.add("global options then --help: the envelope of help, global options applied",
+               asked.get("command") == "help" and asked.get("ok") is True
+               and asked.get("data", {}).get("commands") == plain.get("data", {}).get("commands"),
+               f"command {asked.get('command')!r}, ok {asked.get('ok')!r}")
+    for words in (("--non-interactive", "--version", "--json"), ("--color", "never", "--format", "json", "--version")):
+        body = answer(*words)
+        report.add(f"{' '.join(words)} gives the version", body.get("command") == "version" and body.get("ok") is True
+                   and isinstance(body.get("data", {}).get("version"), str), f"command {body.get('command')!r}")
+    product = [item for item in catalog.get("globalOptions", []) if item.get("long") not in GLOBAL_OPTIONS
+               and item.get("hidden") is not True and item.get("long") != "--version"
+               and (not item.get("argument") or item["argument"].get("choices"))]
+    if product:
+        item = product[0]
+        words = [item["long"]] + ([item["argument"]["choices"][0]] if item.get("argument") else [])
+        done = program.run(*words, "--non-interactive", "--help")
+        report.add(f"a global option of the program's own ({item['long']}) then --help gives the help of the program",
+                   done.returncode == 0 and done.stdout == whole.stdout, f"exit {done.returncode}, {done.stdout[:50]!r}")
+    else:
+        report.skip("a global option of the program's own then --help", "globalOptions has none beyond the trunk to "
+                    "write without a value")
+    body = answer("--field", "--help", "--json")
+    report.add("a word an option takes as its value is no --help: --field --help asks no help",
+               not (body.get("command") == "help" and body.get("ok") is True), f"command {body.get('command')!r}")
+    for words, what in ((("--lang", "en_US", "--help", "--json"), "a malformed global option"),
+                        (("--json", "--json", "--help"), "a repeated global option")):
+        check_failure(report, f"{what} before --help fails with VALIDATION_FAILED, in the name of help",
+                      program.run(*words), "VALIDATION_FAILED", command="help")
+    body = answer("--json", "--version", "--help")
+    report.add("--json --version --help gives the help of version",
+               body.get("command") == "help" and body.get("ok") is True
+               and body.get("data", {}).get("commands") == ["version"], f"command {body.get('command')!r}")
+    check_failure(report, "global options, --version and an operand fail with VALIDATION_FAILED, in the name of version",
+                  program.run("--lang", "fr", "--version", "kit-extra-operand", "--json"), "VALIDATION_FAILED",
+                  command="version")
+    completed = program.run("__complete", "--format", "json", "--non-interactive", "--", "--non-interactive", "--v")
+    try:
+        words = {str(record.get("word")) for record in parse_json(completed.stdout)["data"]["records"]}
+    except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
+        words = set()
+    report.add("__complete at the root, after global options, offers --version", "--version" in words,
+               f"offered {sorted(words)[:6]}")
+
+
 def check_patterns(report: Report, program: Program, catalog: dict, commands: list[dict]) -> None:
     """Section 3: every pattern of a value is in the subset, and within the budget every implementation accepts;
     a value with a final newline does not match a pattern that ends in `$`."""
@@ -1053,14 +1113,27 @@ def check_default_command(report: Report, program: Program, catalog: dict, by_id
                     "the program has not shown that it honours --help after a command, and every such line would "
                     "run the default command")
         return
-    # a first option selects the default command: its help, the same as after its pattern, and not the general one
-    implicit = program.run("--non-interactive", "--help")
-    explicit = program.run(*command["pattern"], "--non-interactive", "--help")
+    # an option of the default command in first place selects it: its help, the same as after its pattern, and not
+    # the general one; global options only before --help are the general help (section 6)
     whole = program.run("--help", "--non-interactive")
-    report.add("a first option and --help give the help of the default command, as its pattern and --help do",
-               implicit.returncode == 0 and implicit.stdout != "" and implicit.stdout == explicit.stdout
-               and implicit.stdout != whole.stdout,
-               f"exit {implicit.returncode}, {implicit.stdout[:50]!r}; after the pattern {explicit.stdout[:50]!r}")
+    first = next(([item["long"]] if not item.get("argument") else [item["long"], item["argument"]["choices"][0]]
+                  for item in command["input"]["options"] if item.get("hidden") is not True
+                  and (not item.get("argument") or item["argument"].get("choices"))), None)
+    if first is None:
+        report.skip("an option of the default command and --help give its help",
+                    "the default command has no visible flag nor option with choices to write without a value")
+    else:
+        implicit = program.run(*first, "--non-interactive", "--help")
+        explicit = program.run(*command["pattern"], *first, "--non-interactive", "--help")
+        report.add("an option of the default command and --help give its help, as its pattern and --help do",
+                   implicit.returncode == 0 and implicit.stdout != "" and implicit.stdout == explicit.stdout
+                   and implicit.stdout != whole.stdout,
+                   f"{' '.join(first)}: exit {implicit.returncode}, {implicit.stdout[:50]!r}; after the pattern "
+                   f"{explicit.stdout[:50]!r}")
+    leading = program.run("--non-interactive", "--help")
+    report.add("global options then --help give the general help, the default command notwithstanding",
+               leading.returncode == 0 and leading.stdout == whole.stdout, f"exit {leading.returncode}, "
+               f"{leading.stdout[:50]!r}")
     # --help as the first word stays the general help
     general = program.run("--help", "--json", "--non-interactive")
     try:
@@ -1639,6 +1712,7 @@ def _run_kit(program: Program, report: Report) -> Report:
     check_help_words(report, program, commands)
     check_patterns(report, program, catalog, commands)
     check_language(report, program, catalog)
+    check_globals_before_help(report, program, catalog)
     check_colors(report, program)
     check_failure(report, "an option the command does not have fails before --help and names the command",
                   program.run("version", "--kit-no-such-option", "--help", "--json"), "VALIDATION_FAILED")

@@ -527,6 +527,19 @@ complete -c @PROG@ -f -a '(__@FN@_complete)'
 }
 
 
+def global_prefix(words):
+    """Section 6: how many words at the start of a line are global options, each with its value when it takes one;
+    `--help` is not counted, being the word that selects help."""
+    declared = {item["long"]: item for item in GLOBAL_OPTIONS if item["long"] != "--help"}
+    index = 0
+    while index < len(words):
+        name, equals, _ = words[index].partition("=")
+        if name not in declared:
+            break
+        index += 2 if declared[name].get("argument") and not equals else 1
+    return min(index, len(words))
+
+
 def next_words(given):
     """The command words that may follow these: the next word of every command a human can be shown whose
     pattern starts with them and goes on (section 6, "command words")."""
@@ -807,6 +820,10 @@ def main(argv):
     if DEFAULT and default_problem(DEFAULT) and BREAK != "default-unchecked":
         refusal = f"The catalog's defaultCommand {DEFAULT!r} {default_problem(DEFAULT)}; nothing is run."
         return fail("unknown", "UNEXPECTED", refusal, "json" if "--json" in argv else "text", False)
+    lead = global_prefix(argv)
+    if BREAK != "globals-before-help-ignored" and 0 < lead < len(argv) and argv[lead] in ("--help", "--version"):
+        # Section 6: global options only, then --help or --version: the line reads as if that word came first
+        argv = [argv[lead]] + argv[:lead] + argv[lead + 1:]
     delegate = next((item for item in CATALOG if item["external"] and argv[:len(item["pattern"])] == item["pattern"]), None)
     if delegate is not None and BREAK != "delegate-parses":
         # Section 9: what follows a delegate's pattern is another executable's command line. It is handed over
@@ -868,14 +885,15 @@ def main(argv):
         bare, words = words, list(next(item for item in CATALOG if item["id"] == DEFAULT)["pattern"])
         if BREAK == "default-bare-absorbed":
             words, bare = words + bare, []
+    if options.get("--version") is True and (argv[:1] == ["--version"] or BREAK == "version-ignored" and not words):
+        # Section 6: --version is `version` spelled as an option, as the first word of the line and nowhere else;
+        # read first, so that a --help after it asks the help of version.
+        words = ["version"] + words
+        del options["--version"]
     if options.get("--help") in (True, "true") and not words:
         # Section 6: --help is `help` spelled as an option; with no command on the line it selects help and is spent.
         words = ["help"]
         del options["--help"]
-    if options.get("--version") is True and (argv[:1] == ["--version"] or BREAK == "version-ignored" and not words):
-        # Section 6: --version is `version` spelled as an option, as the first word of the line and nowhere else.
-        words = ["version"] + words
-        del options["--version"]
     by_id = {item["id"]: item for item in CATALOG}
     selected = None
     for item in CATALOG:
@@ -1117,6 +1135,10 @@ def main(argv):
                 words |= {word for word in candidate_words(next(item for item in CATALOG if item["id"] == DEFAULT))
                           if word.startswith("-")}
             matching = sorted(word for word in words if word.startswith(current))
+        if current.startswith("-") and global_prefix(operands[:-1]) == len(operands[:-1]) \
+                and BREAK != "complete-no-version":
+            # Section 6: at the root, after global options only, --version is a candidate as --help is
+            matching = sorted(set(matching) | {word for word in ("--help", "--version") if word.startswith(current)})
         data = {"count": len(matching), "records": [{"word": word} for word in matching]}
         header = "WORD\n" if sys.stdout.isatty() or BREAK == "header-in-pipe" else ""
         text = header + record_text(data["records"])

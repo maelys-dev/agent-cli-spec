@@ -239,6 +239,8 @@ class KitTest(unittest.TestCase):
                                  ("unavailable-runs", "an unavailable command fails and does not run"),
                                  ("unavailable-after-rendering", "names its cause, not its rendering"),
                                  ("help-unknown-general", "help of an unknown identifier fails"),
+                                 ("globals-before-help-ignored", "--non-interactive --version --json gives the version"),
+                                 ("complete-no-version", "after global options, offers --version"),
                                  ("lang-missing", "catalog lists the global options"),
                                  ("lang-describe", "describe is the same in every language"),
                                  ("lang-envelope", "a failure envelope is the same in every language"),
@@ -314,7 +316,7 @@ class KitTest(unittest.TestCase):
                 ("tool", "default-unchecked", "defaultCommand names an available"),
                 ("offline", "default-unchecked", "defaultCommand names an available"),
                 ("limits", "default-missing-in-summary", "describe --summary carries the catalog's defaultCommand"),
-                ("limits", "default-help-general", "give the help of the default command"),
+                ("limits", "default-help-general", "an option of the default command and --help give its help"),
                 ("limits", "default-bare-absorbed", "a bare word after a first option is refused")):
             with self.subTest(default=default, defect=defect):
                 report = run_kit(FixtureProgram(defect, default=default))
