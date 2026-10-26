@@ -44,8 +44,8 @@ maelys-cli asked for it, cx having met it.
   so. How a program without one reads any other line that starts with an
   option is still not settled: `PROGRAM --json version` is not, `PROGRAM
   --json --version` is.
-- **`__complete`** at the root, after global options only, offers
-  `--version` to a word that starts with `-`.
+- **`__complete`** at the root, before any word but global options, none
+  included, offers `--version` to a word that starts with `-`.
 - The kit checks each, with and without a default command, and replaces the
   check of 2.16.0 that a first option and `--help` give the default
   command's help by the same with an option of that command. The fixture
