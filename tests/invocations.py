@@ -178,7 +178,13 @@ def implicit_lines(command: dict, global_options: list[dict], explicit: list[lis
                 operands.append(word)
             index += 1
         implicit = options + (["--", *operands, *tail] if operands or tail else [])
-        if implicit[:1] in (["--help"], ["--version"]) or tuple(implicit) in seen:
+        # section 6: --help or --version first, or after global options only, is the program's and not the default's
+        lead = 0
+        globals_ = {item["long"]: item for item in global_options if item["long"] != "--help"}
+        while lead < len(implicit) and implicit[lead].partition("=")[0] in globals_:
+            name, equals, _ = implicit[lead].partition("=")
+            lead += 2 if globals_[name].get("argument") and not equals else 1
+        if implicit[lead:lead + 1] in (["--help"], ["--version"]) or tuple(implicit) in seen:
             continue
         seen.add(tuple(implicit))
         pairs.append((implicit, pattern + implicit))

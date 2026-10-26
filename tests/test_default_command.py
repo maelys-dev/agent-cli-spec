@@ -63,7 +63,7 @@ class WithoutADefaultTest(unittest.TestCase):
                                 (["-h", "--json"], (1, "INVALID_COMMAND", "unknown")),
                                 (["-x", "--json"], (1, "INVALID_COMMAND", "unknown")),
                                 (["-x", "version", "--json"], (1, "VALIDATION_FAILED", "version")),
-                                (["--json", "--version"], (1, "INVALID_COMMAND", "unknown")),
+                                (["--json", "--version"], (0, None, "version")),
                                 (["--json", "describe", "--summary"], (0, None, "describe"))):
             with self.subTest(words=words):
                 done = program.run(*words)
@@ -121,8 +121,7 @@ class WithADefaultTest(unittest.TestCase):
                                      (["--json", "list"], "VALIDATION_FAILED", "limits"),
                                      (["--json", DIGEST, "near"], "VALIDATION_FAILED", "limits"),
                                      (["-h", "--json"], "VALIDATION_FAILED", "limits"),
-                                     (["-x", "--json"], "VALIDATION_FAILED", "limits"),
-                                     (["--json", "--version"], "VALIDATION_FAILED", "limits")):
+                                     (["-x", "--json"], "VALIDATION_FAILED", "limits")):
             with self.subTest(words=words):
                 done, ran = self.journal.run(*words)
                 self.assertEqual((answer(done), ran), ((1, code, command), []))
@@ -130,7 +129,8 @@ class WithADefaultTest(unittest.TestCase):
     def test_help_version_discovery_and_completion_run_no_command_of_the_product(self):
         """Proof 7: none of these reaches the default command's handler."""
         for words, command in ((["--help"], "help"), ([DIGEST, "--help"], "help"), (["limits", "--help"], "help"),
-                               (["--version"], "version"), (["describe", "--json"], "describe"),
+                               (["--version"], "version"), (["--json", "--version"], "version"),
+                               (["--lang", "fr", "--help"], "help"), (["describe", "--json"], "describe"),
                                (["describe", "--summary", "--json"], "describe"),
                                (["__complete", "--", "--"], "complete.candidates"),
                                (["__complete", "--", "--non-interactive", ""], "complete.candidates")):

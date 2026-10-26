@@ -5,6 +5,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 
 | Tag | A program fails from this tag when |
 | --- | --- |
+| Unreleased | global options followed by `--help` or `--version` do not give the help or the version of the program, with a default command declared or without: it refuses `PROGRAM --lang fr --help` or `PROGRAM --json --version`, or gives the help of its default command for `PROGRAM --non-interactive --help`; a malformed or repeated global option before `--help` is not refused in the name of `help`; `--version --help` does not give the help of `version`; `__complete` at the root, after global options, does not offer `--version` |
 | 2.21.0 | its catalog does not list `--lang` with the pattern of section 5, or `version` names no `lang`; it refuses a well-formed tag it has no language for, takes a tag with its case into account, or does not refuse a malformed or repeated one; `describe`, a failure envelope, the data of `version`, the `commands` of `help` or the words of `__complete` change with the language; `--lang` with a tag it has no language for does not give the canonical text under another locale; a failure in text does not keep `PROGRAM: [CODE] ` and a hint line `Label: hint` |
 | 2.20.0 | a `pattern` of a value in its catalog is outside the subset of section 3: an escape of anything but a metacharacter (`\d`, `\-`, `\w`), a non-capturing group, a bound above 255 or written with a leading zero, a `-` inside a class that is neither first, last nor the end of a range, a bare `]`, `{` or `}`, a lazy or doubled quantifier, a character that is not printable ASCII; it matches a value with a final newline against a pattern that ends in `$` |
 | 2.18.0 | NO_COLOR or TERM=dumb undoes `--color always`; `CLICOLOR_FORCE` wins over `--color never`, or, when it honors `CLICOLOR_FORCE`, NO_COLOR or TERM=dumb wins over it; it colors an envelope, a `jsonl` record or the `text` of the data of `help` |
@@ -19,6 +20,38 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.9.0 | it declares `completion.install` and refuses a `--field` only after it has written; it declares `--expect` on a transaction without the reserved shape |
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
+
+## Unreleased
+
+Global options before `--help` and `--version`. A person writes the
+language or the colors first, and a program answered `PROGRAM --lang fr
+--help` with `INVALID_COMMAND`, or with the help of its default command, and
+`PROGRAM --lang fr --version` with a refusal in that command's name.
+maelys-cli asked for it, cx having met it.
+
+- **Global options only, then `--help` or `--version`** (section 6): the
+  line reads as if that word came first. The options are those
+  `globalOptions` lists, the program's own included, each with its value;
+  they apply, so `PROGRAM --lang fr --help` is the help in French and
+  `PROGRAM --json --version` the envelope of `version`. The word is `--help`
+  or `--version` as written: `--help=false` asks no help, and `--field
+  --help` gives `--field` the value `--help`. A malformed or repeated option
+  fails at step 2, in the name of `help` or `version`. `--version --help`
+  gives the help of `version`; `--help --version` still fails.
+- **With a default command** (section 8), global options then `--help` are
+  the help of the program, no longer the default command's; an option of
+  the default command then `--help` is still its help. `help` SHOULD say
+  so. How a program without one reads any other line that starts with an
+  option is still not settled: `PROGRAM --json version` is not, `PROGRAM
+  --json --version` is.
+- **`__complete`** at the root, after global options only, offers
+  `--version` to a word that starts with `-`.
+- The kit checks each, with and without a default command, and replaces the
+  check of 2.16.0 that a first option and `--help` give the default
+  command's help by the same with an option of that command. The fixture
+  reads `--version` before `--help`, which it had read the other way round,
+  and two defects prove the checks. The generated lines leave the lines
+  that rule decides out of the comparison with the default command.
 
 ## 2.21.0 — 2026-10-24
 

@@ -587,10 +587,26 @@ rendering alone, a failure carrying no `data`. On a `json-records` command
 ### `help` and `version`
 
 `--help` and `--version` are `help` and `version` spelled as options: as the
-first word of the line each selects its command.
+first word of the line each selects its command, and so does each after
+global options only. A line that starts with options `globalOptions` lists,
+each with its value when it takes one, and whose first other word is
+`--help` or `--version`, reads as if that word came first: the global
+options apply (`PROGRAM --lang fr --help` is the help in French, `PROGRAM
+--json --version` the envelope of `version`), and the rest of the line is
+that command's. A global option selects no command and runs nothing, so it
+cannot take a line's help or version away. The word is `--help` or
+`--version` as written: `--help=false` asks no help, and a word an option
+takes as its value is that value (`PROGRAM --field --help` asks none). The
+options are not judged to resolve the line: a malformed or repeated one
+fails at step 2, in the name of `help` or `version`. A delegate is not
+concerned, its pattern starting with a command's word.
+
 `--version` has no other place: after a command it is an option that command
 does not declare, and the line fails with `VALIDATION_FAILED` like any other
 such line, so that a program asked its version never runs something else.
+`PROGRAM --version --help` gives the help of `version`, the words after
+`--version` being that command's; `PROGRAM --help --version` fails, as
+`help --version` does.
 
 `help` of a word that is no identifier of the catalog but a prefix of some,
 in the sense of `describe --summary --prefix` (section 1), gives the help of
@@ -664,7 +680,9 @@ given with hidden options excluded; choices; command identifiers after
 are offered. A hidden or an unavailable command is never offered, as a word or as an identifier: `describe` still answers
 for it, completion does not propose it. Whether options are offered before a
 `-` is typed is the implementation's choice, and a script follows its own
-`__complete` either way.
+`__complete` either way. At the root, after global options only, a word that
+starts with `-` is completed with `--version` among the candidates, the line
+reading as `PROGRAM --version` would.
 
 ### Installing the completion
 
@@ -810,10 +828,11 @@ json --format text`.
 ### A line that names no command
 
 In a program whose catalog declares `defaultCommand`, and in it alone, step
-1 reads the first word of the line, and that word only:
+1 reads the first word of the line, and that word only, global options
+followed by `--help` or `--version` counting as that word (section 6):
 
 - `--help` or `--version` selects `help` or `version`, as in every program
-  (section 6);
+  (section 6), after global options only as in first place;
 - the first word of a command's pattern resolves as usual, a command of
   several words included;
 - any other word that starts with `-` (an option, `--`, a word with one
@@ -842,8 +861,10 @@ names it. A line that selects the default command and the same line written
 after its pattern give the same answer. A refusal or a failure of the
 default command is its own: the program tries no other command, before the
 handler or after it. `help` SHOULD say which command is the default, that a
-line starting with an option other than `--help` and `--version` is its, and
-show it invoked both ways. `__complete` reads its words as
+line starting with any other option than global options followed by
+`--help` or `--version` is its, and show it invoked both ways: `PROGRAM
+--lang fr --help` is the help of the program, `PROGRAM --label x --help`
+that of the default command. `__complete` reads its words as
 the line would be read: after a first option they are completed as the
 default command's, and at the root a word that starts with `-` is completed
 with the options of the default command among the candidates.
@@ -852,8 +873,9 @@ Declaring a default command can stop a line that ran: `PROGRAM --json list`
 selects the default command and is refused, `PROGRAM list --json` is the
 form that runs `list`. In a program that declares no default command none of
 this applies. How it reads an empty line, or a line that starts with an
-option other than `--help` and `--version`, is as it was: this version does
-not settle it.
+option other than global options followed by `--help` or `--version`, is as
+it was: this version does not settle it, `PROGRAM --json version` among
+them, though `PROGRAM --json --version` is settled.
 
 ### Error codes
 
