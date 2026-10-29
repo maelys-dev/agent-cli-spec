@@ -5,7 +5,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 
 | Tag | A program fails from this tag when |
 | --- | --- |
-| Unreleased | a refusal of steps 1, 2, 4 or 6 of section 8 carries no `error.issues` entry, more than one, a code outside the list or not the cause's, or a `path` other than the option's `long`, the operand's `name`, `operands`, the word as written or the rule's options joined by commas |
+| 2.23.0 | a refusal of steps 1, 2, 4 or 6 of section 8 carries no `error.issues` entry, more than one, a code outside the list or not the cause's, or a `path` other than the option's `long`, the operand's `name`, `operands`, the word as written or the rule's options joined by commas |
 | 2.22.0 | global options followed by `--help` or `--version` do not give the help or the version of the program, with a default command declared or without: it refuses `PROGRAM --lang fr --help` or `PROGRAM --json --version`, or gives the help of its default command for `PROGRAM --non-interactive --help`; a malformed or repeated global option before `--help` is not refused in the name of `help`; `--version --help` does not give the help of `version`; `__complete` at the root, after global options, does not offer `--version` |
 | 2.21.0 | its catalog does not list `--lang` with the pattern of section 5, or `version` names no `lang`; it refuses a well-formed tag it has no language for, takes a tag with its case into account, or does not refuse a malformed or repeated one; `describe`, a failure envelope, the data of `version`, the `commands` of `help` or the words of `__complete` change with the language; `--lang` with a tag it has no language for does not give the canonical text under another locale; a failure in text does not keep `PROGRAM: [CODE] ` and a hint line `Label: hint` |
 | 2.20.0 | a `pattern` of a value in its catalog is outside the subset of section 3: an escape of anything but a metacharacter (`\d`, `\-`, `\w`), a non-capturing group, a bound above 255 or written with a leading zero, a `-` inside a class that is neither first, last nor the end of a range, a bare `]`, `{` or `}`, a lazy or doubled quantifier, a character that is not printable ASCII; it matches a value with a final newline against a pattern that ends in `$` |
@@ -22,7 +22,7 @@ whoever moves a pin. A tag that is not listed asks nothing of a program.
 | 2.8.0 | its completion script fails under a second bash, the system's 3.2 included; its completion offers a hidden or an unavailable identifier after `help` or `describe` |
 | 2.7.0 | its completion script has no file fallback in a shell; its `completion` writes on a terminal; `__complete` after a delegate's pattern offers the program's own options or differs between formats |
 
-## Unreleased
+## 2.23.0 — 2026-10-29
 
 What a refusal names. A refusal of the line said its cause in a sentence,
 and an agent may not read sentences: an orchestrator could not tell, from
