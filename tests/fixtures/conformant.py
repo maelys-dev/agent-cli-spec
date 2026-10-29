@@ -288,7 +288,8 @@ def colors(option, stream):
     return stream.isatty()
 
 
-def fail(command_id, code, message, fmt, compact, hint="read describe."):
+def fail(command_id, code, message, fmt, compact, hint="read describe.", issue=None):
+    """A failure envelope; `issue` is (code, path), the first cause section 8 names for a refusal of the line."""
     if BREAK == "code-drift" and code == "INVALID_COMMAND":
         code = "INVALID_PATH"
     french = HUMAN == "fr"
@@ -299,8 +300,26 @@ def fail(command_id, code, message, fmt, compact, hint="read describe."):
     else:
         if french and BREAK == "lang-envelope":
             message = "Échec : " + message
-        sys.stderr.write(envelope(command_id, False, 1, {"code": code, "message": message, "hint": hint}, compact))
+        error = {"code": code, "message": message, "hint": hint}
+        if issue is not None and BREAK != "issues-missing":
+            reason = "VALUE_PROBLEM" if BREAK == "issues-unlisted-code" else issue[0]
+            path = issue[1].lstrip("-") if BREAK == "issues-path-without-dashes" else issue[1]
+            error["issues"] = [{"code": reason, "path": path, "message": message}]
+        sys.stderr.write(envelope(command_id, False, 1, error, compact))
     return 1
+
+
+def value_issue(problem):
+    """Section 8: the reserved code of what kind_problem found."""
+    if problem == "without its value":
+        return "MISSING_VALUE"
+    if problem.startswith("not one of"):
+        return "VALUE_CHOICE"
+    if problem == "beyond its declared range":
+        return "VALUE_RANGE"
+    if problem.startswith("not matching"):
+        return "VALUE_PATTERN"
+    return "VALUE_KIND"
 
 
 SHELLS = ("bash", "zsh", "fish")
@@ -789,13 +808,13 @@ def whole_line_problem(command, options, operands):
     for name in sorted(given & set(own)):
         for other in own[name]["requires"]:
             if other not in given:
-                return f"{name} requires {other}."
+                return f"{name} requires {other}.", "REQUIRES", name
         for other in own[name]["conflictsWith"]:
             if other in given or other in supplied:
-                return f"{name} conflicts with {other}."
+                return f"{name} conflicts with {other}.", "CONFLICTS", name
     for name, item in own.items():
         if item["required"] and name not in given:
-            return f"{name} is required."
+            return f"{name} is required.", "REQUIRED_OPTION", name
     groups = {}
     for name, item in own.items():
         if item.get("group"):
@@ -807,12 +826,15 @@ def whole_line_problem(command, options, operands):
                   "at-most-one": len(present) > 1, "exactly-one": len(present) != 1,
                   "all-or-none": 0 < len(present) < len(rule["options"])}[rule["kind"]]
         if broken:
-            return f"{rule['kind']} of {', '.join(rule['options'])} does not hold."
+            reason = rule["kind"].upper().replace("-", "_")
+            return (f"{rule['kind']} of {', '.join(rule['options'])} does not hold.", reason,
+                    rule["options"][0] if reason == "REQUIRES" else ",".join(rule["options"]))
     for place, value in enumerate(operands):
         if expected and (place < len(expected) or expected[-1]["variadic"]):
-            problem = kind_problem(expected[min(place, len(expected) - 1)], value)
+            declared = expected[min(place, len(expected) - 1)]
+            problem = kind_problem(declared, value)
             if problem:
-                return f"{expected[min(place, len(expected) - 1)]['name']} is {problem}."
+                return f"{declared['name']} is {problem}.", value_issue(problem), declared["name"]
     return None
 
 
@@ -900,42 +922,56 @@ def main(argv):
         if words[:len(item["pattern"])] == item["pattern"]:
             selected = item
     if selected is None:
-        return fail("unknown", "INVALID_COMMAND", f"Unknown command {' '.join(words)!r}.", fmt, compact)
+        return fail("unknown", "INVALID_COMMAND", f"Unknown command {' '.join(words)!r}.", fmt, compact,
+                    issue=("UNKNOWN_COMMAND", words[0] if words else ""))
     operands = words[len(selected["pattern"]):] + (passthrough or [])
     known = {item["long"] for item in selected["input"]["options"]} | {item["long"] for item in GLOBAL_OPTIONS}
     if isinstance(selected["effect"], dict) and ("--dry-run" in options or "--plan" in options):
-        return fail(selected["id"], "VALIDATION_FAILED", "The command plans by default; use --apply to apply.", fmt, compact)
+        return fail(selected["id"], "VALIDATION_FAILED", "The command plans by default; use --apply to apply.", fmt, compact,
+                    issue=("UNKNOWN_OPTION", "--dry-run" if "--dry-run" in options else "--plan"))
     for name in options:
         if name not in known and not (name == "--version" and BREAK == "version-ignored"):
-            return fail(selected["id"], "VALIDATION_FAILED", f"Option {name} is not supported by '{selected['id']}'.", fmt, compact)
+            return fail(selected["id"], "VALIDATION_FAILED", f"Option {name} is not supported by '{selected['id']}'.", fmt, compact,
+                        issue=("UNKNOWN_OPTION", name))
     if duplicates:
-        return fail(selected["id"], "VALIDATION_FAILED", f"Duplicate option {duplicates[0]}.", fmt, compact)
+        return fail(selected["id"], "VALIDATION_FAILED", f"Duplicate option {duplicates[0]}.", fmt, compact,
+                    issue=("DUPLICATE_OPTION", duplicates[0]))
     if bare:
         return fail(selected["id"], "VALIDATION_FAILED",
                     f"{bare[0]} is neither an option, the value of one, nor an operand: a line that starts with an "
-                    f"option is '{selected['id']}'s, whose operands go after --.", fmt, compact)
+                    f"option is '{selected['id']}'s, whose operands go after --.", fmt, compact,
+                    issue=("UNEXPECTED_OPERAND", "operands"))
     if stray:
         return fail(selected["id"], "VALIDATION_FAILED",
                     f"{stray[0]} is neither an option nor an operand: options are spelled --name, and an operand "
-                    "that starts with a dash goes after --.", fmt, compact)
+                    "that starts with a dash goes after --.", fmt, compact, issue=("NOT_AN_OPTION", stray[0]))
     for name, value in options.items():
         argument = declarations[name].get("argument")
         if argument is None:
             if value is not True and value not in ("true", "false"):
-                return fail(selected["id"], "VALIDATION_FAILED", f"{name} takes true or false.", fmt, compact)
+                return fail(selected["id"], "VALIDATION_FAILED", f"{name} takes true or false.", fmt, compact,
+                            issue=("VALUE_KIND", name))
             options[name] = value is True or value == "true"
         else:
             own = next((item for item in selected["input"]["options"] if item["long"] == name), declarations[name])
             problem = kind_problem(own.get("argument", argument), value)
             if problem:
-                return fail(selected["id"], "VALIDATION_FAILED", f"{name} is {problem}.", fmt, compact)
+                return fail(selected["id"], "VALIDATION_FAILED", f"{name} is {problem}.", fmt, compact,
+                            issue=(value_issue(problem), name))
 
     if selected["outputMode"] == "protocol-stream" and not selected["external"] and BREAK != "stream-renders":
         # Section 9: stdout is the protocol's; an option that would render something there is refused.
         asked = [name for name in RENDERING if name in options]
         if asked:
             return fail(selected["id"], "VALIDATION_FAILED",
-                        f"{asked[0]} renders on stdout, which '{selected['id']}' reserves for its protocol.", fmt, compact)
+                        f"{asked[0]} renders on stdout, which '{selected['id']}' reserves for its protocol.", fmt, compact,
+                        issue=("RENDERING", asked[0]))
+
+    def arity_issue(command, given):
+        """Section 8: the first absent required operand, or `operands` for one too many."""
+        expected = command["input"]["operands"]
+        return ("MISSING_OPERAND", expected[len(given)]["name"]) if len(given) < len(expected) \
+            and expected[len(given)]["required"] else ("EXTRA_OPERAND", "operands")
 
     def arity(command, given):
         """Section 8: the number of operands, where the catalog owns the line."""
@@ -948,7 +984,8 @@ def main(argv):
                    f"operands, not {len(given)}."
         return None
     if BREAK == "help-checks-arity" and arity(selected, operands):
-        return fail(selected["id"], "VALIDATION_FAILED", arity(selected, operands), fmt, compact)
+        return fail(selected["id"], "VALIDATION_FAILED", arity(selected, operands), fmt, compact,
+                    issue=arity_issue(selected, operands))
     # Section 8: what one option says alone is judged first and names the command; then --help gives the help
     # of the command, and what the line as a whole lacks is no longer asked. The envelope names help.
     helped = options.get("--help") is True and not selected["input"]["passthrough"] and BREAK != "help-runs"
@@ -960,18 +997,20 @@ def main(argv):
             return 0
     # step 4: what the line says as a whole
     if arity(selected, operands):
-        return fail(selected["id"], "VALIDATION_FAILED", arity(selected, operands), fmt, compact)
+        return fail(selected["id"], "VALIDATION_FAILED", arity(selected, operands), fmt, compact,
+                    issue=arity_issue(selected, operands))
     if not selected["input"]["passthrough"] and BREAK != "whole-line-unchecked":
         problem = whole_line_problem(selected, options, operands)
         if problem:
-            return fail(selected["id"], "VALIDATION_FAILED", problem, fmt, compact)
+            return fail(selected["id"], "VALIDATION_FAILED", problem[0], fmt, compact, issue=problem[1:])
     # step 5: this build cannot run the command, so it does not, whatever its rendering would have been refused for
     if not selected["available"] and BREAK not in ("unavailable-runs", "unavailable-after-rendering"):
         return fail(selected["id"], "UNSUPPORTED", f"'{selected['id']}' is not available: {selected['unavailableReason']}.",
                     fmt, compact)
     # step 6: rendering constraints
     if "--field" in options and fmt == "json":
-        return fail(selected["id"], "VALIDATION_FAILED", "--field is not available with --format json.", fmt, compact)
+        return fail(selected["id"], "VALIDATION_FAILED", "--field is not available with --format json.", fmt, compact,
+                    issue=("RENDERING", "--field"))
     if "--field" in options and selected["effect"] != "read" and BREAK != "field-after-write":
         # Section 5: a command that may write decides on --field before it runs, and from the catalog.
         schema = selected.get("outputSchema", {})
@@ -980,9 +1019,10 @@ def main(argv):
         if options["--field"] not in accepted:
             return fail(selected["id"], "VALIDATION_FAILED",
                         f"--field accepts a member '{selected['id']}' always returns: {', '.join(accepted) or 'none'}.",
-                        fmt, compact)
+                        fmt, compact, issue=("RENDERING", "--field"))
     if fmt == "jsonl" and selected["outputMode"] != "json-records" and "--field" not in options:
-        return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact)
+        return fail(selected["id"], "VALIDATION_FAILED", "jsonl is for json-records commands.", fmt, compact,
+                    issue=("RENDERING", "--format"))
     if not selected["available"] and BREAK == "unavailable-after-rendering":
         return fail(selected["id"], "UNSUPPORTED", f"'{selected['id']}' is not available.", fmt, compact)
     identifier = selected["id"]
@@ -1155,7 +1195,8 @@ def main(argv):
     if field is not None:
         if field not in data:
             if BREAK != "field-silent":
-                return fail(identifier, "VALIDATION_FAILED", f"No member {field!r} in data.", fmt, compact)
+                return fail(identifier, "VALIDATION_FAILED", f"No member {field!r} in data.", fmt, compact,
+                            issue=("RENDERING", "--field"))
             data[field] = []
         text = field_text(data[field])
         emitted = data[field] if isinstance(data[field], list) else [data[field]]

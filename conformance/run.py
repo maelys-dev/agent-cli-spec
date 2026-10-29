@@ -1034,6 +1034,62 @@ def check_globals_before_help(report: Report, program: Program, catalog: dict) -
                "--version" in words and "kit-missing-at-the-bare-root" not in words, f"offered {sorted(words)[:6]}")
 
 
+def check_issue(report: Report, name: str, completed: subprocess.CompletedProcess, code: str, issue: str, path: str,
+                command: str | None = None) -> None:
+    """Section 8, What a refusal names: the refusal, then exactly one entry in error.issues with its code and path."""
+    check_failure(report, name, completed, code, command=command)
+    try:
+        body = parse_json(completed.stderr)
+        entries = body["error"].get("issues")
+    except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
+        entries = None
+    report.add(f"{name}: error.issues names {issue} at {path}",
+               isinstance(entries, list) and len(entries) == 1 and isinstance(entries[0], dict)
+               and entries[0].get("code") == issue and entries[0].get("path") == path,
+               f"issues {str(entries)[:160]}")
+
+
+def check_refusal_issues(report: Report, program: Program, commands: list[dict]) -> None:
+    """Section 8: each reserved code on a line that runs nothing of the product, one cause per line."""
+    for words, issue, path, name in (
+            (("kit-no-such-command", "--json"), "UNKNOWN_COMMAND", "kit-no-such-command", "an unknown command"),
+            (("version", "--kit-no-such-option", "--json"), "UNKNOWN_OPTION", "--kit-no-such-option", "an unknown option"),
+            (("help", "--version", "--json"), "UNKNOWN_OPTION", "--version", "--version after a command"),
+            (("help", "-x", "--json"), "NOT_AN_OPTION", "-x", "a word with one dash"),
+            (("version", "--json", "--json"), "DUPLICATE_OPTION", "--json", "a repeated option"),
+            (("version", "--json", "--format"), "MISSING_VALUE", "--format", "an option without its value"),
+            (("version", "--json", "--verbose=maybe"), "VALUE_KIND", "--verbose", "a flag written with another value"),
+            (("version", "--color=kit-no-such-choice", "--json"), "VALUE_CHOICE", "--color", "a value outside its choices"),
+            (("version", "--lang", "1234", "--json"), "VALUE_PATTERN", "--lang", "a value outside its pattern"),
+            (("version", "kit-extra-operand", "--json"), "EXTRA_OPERAND", "operands", "an operand too many"),
+            (("version", "--format", "jsonl"), "RENDERING", "--format", "jsonl without records"),
+            (("describe", "--field", "kind", "--json"), "RENDERING", "--field", "--field with json")):
+        check_issue(report, f"{name} names its cause", program.run(*words),
+                    "INVALID_COMMAND" if issue == "UNKNOWN_COMMAND" else "VALIDATION_FAILED", issue, path)
+    by_id = {command["id"]: command for command in commands}
+    shell = next((item for item in by_id.get("completion", {}).get("input", {}).get("operands", []) if item.get("required")),
+                 None)
+    if shell is not None:
+        check_issue(report, "a required operand absent names its cause", program.run("completion", "--json"),
+                    "VALIDATION_FAILED", "MISSING_OPERAND", shell["name"])
+    prefix = next((item for item in by_id.get("describe", {}).get("input", {}).get("options", [])
+                   if item.get("long") == "--prefix"), None)
+    if prefix is not None:
+        check_issue(report, "an option without one it requires names its cause",
+                    program.run("describe", "--prefix", "kit", "--json"), "VALIDATION_FAILED", "REQUIRES", "--prefix")
+        check_issue(report, "an option with an operand it conflicts with names its cause",
+                    program.run("describe", "version", "--prefix", "kit", "--summary", "--json"), "VALIDATION_FAILED",
+                    "CONFLICTS", "--prefix")
+    transaction = next((command for command in commands if isinstance(command.get("effect"), dict)
+                        and command.get("available") and not command.get("hidden")), None)
+    if transaction is not None:
+        check_issue(report, f"{transaction['id']}: --dry-run on a transaction names its cause",
+                    program.run(*transaction["pattern"], "--dry-run", "--json"), "VALIDATION_FAILED", "UNKNOWN_OPTION",
+                    "--dry-run")
+    report.skip("REQUIRED_OPTION, ALL_OR_NONE, AT_MOST_ONE, EXACTLY_ONE, VALUE_RANGE",
+                "no built-in command declares what would refuse them; a product's own commands are not run")
+
+
 def check_patterns(report: Report, program: Program, catalog: dict, commands: list[dict]) -> None:
     """Section 3: every pattern of a value is in the subset, and within the budget every implementation accepts;
     a value with a final newline does not match a pattern that ends in `$`."""
@@ -1149,11 +1205,13 @@ def check_default_command(report: Report, program: Program, catalog: dict, by_id
     report.add("--help as the first word gives the general help, not the default command's",
                isinstance(listed, list) and listed != [default], f"commands {str(listed)[:120]}")
     # no word further on is a command, nor an operand of the default before --; a word with one dash is refused
-    for words, what in ((["--json", "kit-bare-word", "--help"], "a bare word after a first option is refused"),
-                        (["-x", "--help", "--json"], "a word with one dash in first place is refused")):
+    for words, what, issue, path in (
+            (["--json", "kit-bare-word", "--help"], "a bare word after a first option is refused", "UNEXPECTED_OPERAND",
+             "operands"),
+            (["-x", "--help", "--json"], "a word with one dash in first place is refused", "NOT_AN_OPTION", "-x")):
         refused = program.run(*words, "--non-interactive")
-        check_failure(report, f"{what}, in the name of the default command", refused, "VALIDATION_FAILED",
-                      command=default)
+        check_issue(report, f"{what}, in the name of the default command", refused, "VALIDATION_FAILED", issue, path,
+                    command=default)
     # an unknown first word is never the default command
     check_failure(report, "an unknown first word fails with INVALID_COMMAND, the default command notwithstanding",
                   program.run("kit-no-such-command", "--help", "--json"), "INVALID_COMMAND")
@@ -1719,6 +1777,7 @@ def _run_kit(program: Program, report: Report) -> Report:
     check_patterns(report, program, catalog, commands)
     check_language(report, program, catalog)
     check_globals_before_help(report, program, catalog)
+    check_refusal_issues(report, program, commands)
     check_colors(report, program)
     check_failure(report, "an option the command does not have fails before --help and names the command",
                   program.run("version", "--kit-no-such-option", "--help", "--json"), "VALIDATION_FAILED")

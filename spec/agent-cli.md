@@ -728,8 +728,11 @@ Failure, on stderr only, stdout empty:
 asked for the help of a command and got it (section 6), or `unknown` when
 resolution failed. `error.message` states the first causal failure in plain
 language; `error.hint` gives the next safe action and SHOULD be present;
-`error.issues` MAY list `{"code", "path", "message"}` entries for schema
-failures. `data` is governed by the descriptor's `outputSchema`. A
+`error.issues` lists `{"code", "path", "message"}` entries: a refusal of
+steps 1, 2, 4 and 6 of section 8 carries exactly one, its first cause, with
+a reserved code and the path section 8 gives ("What a refusal names"), and a
+product MAY add entries for causes of its own, a schema failure inside the
+command among them. The text rendering shows none of them. `data` is governed by the descriptor's `outputSchema`. A
 `json-records` command renders `{"count": N, "records": [...]}` in the
 envelope, `count` being the number of `records` in that envelope (a total
 beyond it is an `x-` member), one compact record per line with `--format
@@ -803,6 +806,61 @@ Errors are reported in this causal order:
    state and concurrency preconditions.
 
 A failure of steps 1 to 5 names the command the line resolved, or `unknown`.
+
+### What a refusal names
+
+A refusal of steps 1, 2, 4 and 6, the program's own reading of the line,
+MUST carry in `error.issues` exactly one entry, its first cause, whose
+`code` is one of the list below and whose `path` says what part of the line
+is at fault, so that an agent corrects the line without reading a message.
+`error.code` stays `INVALID_COMMAND` or `VALIDATION_FAILED`, and
+`error.message` and `error.hint` are unchanged; the entry's `message` is a
+sentence for a person, as `error.message` is, in the canonical language. Of
+several causes within one step, which comes first is the implementation's:
+the text orders the steps, not what a step judges. A refusal of steps 5 and
+7 is not concerned: its code already names its cause.
+
+| Code | Step | The cause | `path` |
+| --- | --- | --- | --- |
+| `UNKNOWN_COMMAND` | 1 | no command is named by the line | the first word, as written, empty for an empty line |
+| `UNKNOWN_OPTION` | 2 | an option the command does not declare, `--dry-run` on a transaction and `--version` after a command included | the option as written, before any `=` |
+| `NOT_AN_OPTION` | 2 | a word with one dash before `--` | the word as written |
+| `DUPLICATE_OPTION` | 2 | an option written twice | the option |
+| `MISSING_VALUE` | 2 | an option that takes a value ends the line | the option |
+| `VALUE_KIND` | 2, 4 | a value that is not of its kind, an empty one included, beyond 64 bits or of the wrong width | the option or the operand |
+| `VALUE_RANGE` | 2, 4 | a value outside `minimum` and `maximum` | the option or the operand |
+| `VALUE_CHOICE` | 2, 4 | a value outside `choices` | the option or the operand |
+| `VALUE_PATTERN` | 2, 4 | a value that does not match `pattern` | the option or the operand |
+| `UNEXPECTED_OPERAND` | 2 | a bare word before `--` in a line that selected the default command | `operands` |
+| `MISSING_OPERAND` | 4 | a required operand is absent | the first absent operand |
+| `EXTRA_OPERAND` | 4 | more operands than the command takes | `operands` |
+| `REQUIRED_OPTION` | 4 | a required option is absent | the option |
+| `REQUIRES` | 4 | an option without one it requires | the option that requires |
+| `CONFLICTS` | 4 | an option with one it conflicts with, or with an operand | the option |
+| `ALL_OR_NONE` | 4 | some of the options of a group or an `all-or-none` constraint | the rule's options |
+| `AT_MOST_ONE` | 4 | more than one of the options of an `at-most-one` constraint | the rule's options |
+| `EXACTLY_ONE` | 4 | not one of the options of an `exactly-one` constraint | the rule's options |
+| `RENDERING` | 6 | a rendering the command refuses: `jsonl` without records or `--field`, `--field` with `json` or naming a member it cannot carry, a rendering option on a stream | the option refused |
+
+A `path` is a string when it names a part of the line: an option by its
+`long` as `describe` writes it (`--timeout-ms`, whether the line wrote
+`--timeout-ms=0` or not), an operand by its `name` (`FILE`), `operands` for
+the operands as a whole, a word as written for `UNKNOWN_COMMAND`,
+`UNKNOWN_OPTION` and `NOT_AN_OPTION`, and a rule's options in their
+declared order joined by commas (`--a,--b`), which no `long` contains. A
+string that starts with `--` names an option, as in `conflictsWith`. A path
+never carries a value the line gave: a word too many or a bare word is
+`operands`, not the word.
+
+The same grammar holds for the entries a product adds. A member of a
+document the command read is an array, its source first, then the names of
+members and the indices of arrays (`["stdin", "start", "prompt"]`,
+`["--config", "limits", "memory"]`, the option or operand that named the
+file as its source); any other object of the product is a bare name it
+documents (`provider`), an operand's `name` of the command it answers for
+taking precedence. The codes of the list are reserved: a product MUST NOT
+use one for another meaning, and names its own as it names its error
+codes. A program pinned to an earlier tag carries no such entry.
 A word after `--` is an operand whatever its spelling: `--help` and
 `--version` there ask nothing. `--help=false` asks no help.
 
