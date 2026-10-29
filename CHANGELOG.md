@@ -38,7 +38,9 @@ asked for it, the harness having met it.
   `VALUE_PATTERN`, `UNEXPECTED_OPERAND`; `MISSING_OPERAND`, `EXTRA_OPERAND`,
   `REQUIRED_OPTION`, `REQUIRES`, `CONFLICTS`, `ALL_OR_NONE`, `AT_MOST_ONE`,
   `EXACTLY_ONE`; `RENDERING`. A refusal of steps 5 and 7 is not concerned,
-  and the order of causes within a step stays the implementation's.
+  and the order of causes within a step stays the implementation's. A
+  refusal on a limit of the implementation that no rule sets (more options
+  than it reads) carries a code of the product's own, not one of the list.
 - **`path`**: an option by its `long` (`--timeout-ms`), an operand by its
   `name`, `operands` for the operands as a whole, a word as written for an
   unknown command, an unknown option or a word with one dash, a rule's

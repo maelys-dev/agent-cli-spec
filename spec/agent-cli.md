@@ -818,7 +818,11 @@ is at fault, so that an agent corrects the line without reading a message.
 sentence for a person, as `error.message` is, in the canonical language. Of
 several causes within one step, which comes first is the implementation's:
 the text orders the steps, not what a step judges. A refusal of steps 5 and
-7 is not concerned: its code already names its cause.
+7 is not concerned: its code already names its cause. A refusal on a limit
+of the implementation, which neither the descriptor nor this text sets (more
+options on a line than it reads), is no cause of the list: its one entry
+carries a code of the product's own, named as its error codes are
+(`ACME_TOO_MANY_OPTIONS`), and a `path` by the grammar below.
 
 | Code | Step | The cause | `path` |
 | --- | --- | --- | --- |
